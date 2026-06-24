@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 /**
  * AdminLoginForm — Secure admin portal login.
@@ -21,6 +21,30 @@ export function AdminLoginForm({ onSubmit, isLoading }) {
   const [qrCode, setQrCode] = useState(null);
   const [twoFaSecret, setTwoFaSecret] = useState(null);
   const [error, setError] = useState(null);
+  const [deviceTrusted, setDeviceTrusted] = useState(false);
+
+  useEffect(() => {
+    // Check if this device is already trusted
+    const trustedDevices = localStorage.getItem("trustedAdminDevices");
+    if (trustedDevices) {
+      const devices = JSON.parse(trustedDevices);
+      const deviceId = getDeviceId();
+      const trusted = devices.find(d => d.id === deviceId && new Date(d.expiry) > new Date());
+      if (trusted) {
+        setDeviceTrusted(true);
+        setFormData(prev => ({ ...prev, email: trusted.email }));
+      }
+    }
+  }, []);
+
+  const getDeviceId = () => {
+    let deviceId = localStorage.getItem("deviceId");
+    if (!deviceId) {
+      deviceId = "device-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
+      localStorage.setItem("deviceId", deviceId);
+    }
+    return deviceId;
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -93,13 +117,29 @@ export function AdminLoginForm({ onSubmit, isLoading }) {
       }
 
       const data = await response.json();
-      // Store admin token in secure cookie
-      document.cookie = `adminToken=${data.adminToken}; Secure; HttpOnly; SameSite=Strict`;
-      // Store admin info in session storage for dashboard access
+      // Store admin token in session storage
       sessionStorage.setItem("adminAuth", JSON.stringify({
         adminName: data.adminName,
         adminToken: data.adminToken
       }));
+
+      // If "trust this device" was checked, store device info for 30 days
+      if (formData.trustDevice) {
+        const trustedDevices = JSON.parse(localStorage.getItem("trustedAdminDevices") || "[]");
+        const deviceId = getDeviceId();
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 30);
+
+        // Add or update this device
+        const updatedDevices = trustedDevices.filter(d => d.id !== deviceId);
+        updatedDevices.push({
+          id: deviceId,
+          email: formData.email,
+          expiry: expiryDate.toISOString(),
+          trustedAt: new Date().toISOString()
+        });
+        localStorage.setItem("trustedAdminDevices", JSON.stringify(updatedDevices));
+      }
 
       // Redirect to dashboard
       await onSubmit(data);
@@ -114,7 +154,11 @@ export function AdminLoginForm({ onSubmit, isLoading }) {
       <form onSubmit={handleTwoFaSubmit} className="admin-login-form dark">
         <div className="form-section">
           <h2 className="form-title">Two-Factor Authentication</h2>
-          <p className="form-subtitle">Set up your authenticator app</p>
+          {deviceTrusted ? (
+            <p className="form-subtitle">✅ Welcome back! Enter your 2FA code</p>
+          ) : (
+            <p className="form-subtitle">Set up your authenticator app</p>
+          )}
         </div>
 
         {error && <div className="form-error">{error}</div>}
@@ -169,7 +213,13 @@ export function AdminLoginForm({ onSubmit, isLoading }) {
               onChange={handleChange}
               disabled={isLoading}
             />
-            <span>Trust this device for 30 days</span>
+            <span>
+              <strong>Trust this device for 30 days</strong>
+              <br />
+              <span className="form-hint" style={{ fontSize: "11px", marginTop: "4px", display: "block" }}>
+                You won't need to enter a code on this device during the next 30 days. Only check on secure devices.
+              </span>
+            </span>
           </label>
         </div>
 
