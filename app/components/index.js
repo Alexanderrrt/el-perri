@@ -8,3 +8,4 @@ export { InstagramReels } from "./InstagramReels";
 export { AdminLoginForm } from "./AdminLoginForm";
 export { AdminDashboard } from "./AdminDashboard";
 export { GuestCheckoutForm } from "./GuestCheckoutForm";
+export { DynamicMenu } from "./DynamicMenu";
