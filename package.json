@@ -4,9 +4,9 @@
   "description": "El Perri Latin Food — Restaurant ordering platform with admin dashboard, guest checkout, marketing compliance",
   "private": true,
   "scripts": {
-    "dev": "node node_modules/next/dist/bin/next dev",
-    "build": "node node_modules/next/dist/bin/next build",
-    "start": "node node_modules/next/dist/bin/next start",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "lint": "eslint app/**/*.{js,jsx} lib/**/*.js --fix 2>/dev/null || echo 'ESLint not configured yet'",
     "test": "jest 2>/dev/null || echo 'Jest not configured yet'",
     "verify": "npm run build && echo '✅ Build verified — ready for commit'",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@prisma/client": "^7.8.0",
+    "@supabase/supabase-js": "^2.108.2",
     "bcryptjs": "^2.4.3",
     "express-rate-limit": "^7.1.5",
     "next": "^16.2.9",

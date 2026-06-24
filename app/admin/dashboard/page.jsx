@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import { listUsers, deleteUserById } from "@/lib/userStore";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null);
@@ -39,6 +41,20 @@ export default function AdminDashboard() {
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
     if (authData) setAdmin(JSON.parse(authData));
     loadAllData();
+    refreshUsers();
+
+    // Real-time: when a guest signs up on ANY device, update the table live
+    if (isSupabaseConfigured) {
+      const channel = supabase
+        .channel("registered_users_changes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "registered_users" },
+          () => refreshUsers()
+        )
+        .subscribe();
+      return () => supabase.removeChannel(channel);
+    }
   }, []);
 
   const loadAllData = () => {
@@ -49,7 +65,6 @@ export default function AdminDashboard() {
     const inv = localStorage.getItem("inventory");
     const stf = localStorage.getItem("staff");
     const promo = localStorage.getItem("promotions");
-    const regUsers = localStorage.getItem("registeredUsers");
 
     if (items) setMenuItems(JSON.parse(items));
     if (ordr) setOrders(JSON.parse(ordr));
@@ -57,14 +72,24 @@ export default function AdminDashboard() {
     if (inv) setInventory(JSON.parse(inv));
     if (stf) setStaff(JSON.parse(stf));
     if (promo) setPromotions(JSON.parse(promo));
-    if (regUsers) setUsers(JSON.parse(regUsers));
   };
 
-  const deleteUser = (userId) => {
-    const updated = users.filter(u => u.userId !== userId);
-    if (typeof window !== "undefined") localStorage.setItem("registeredUsers", JSON.stringify(updated));
-    setUsers(updated);
-    notify("User deleted", "success");
+  const refreshUsers = async () => {
+    try {
+      setUsers(await listUsers());
+    } catch (err) {
+      notify("Could not load users: " + err.message, "error");
+    }
+  };
+
+  const deleteUser = async (userId) => {
+    try {
+      await deleteUserById(userId);
+      await refreshUsers();
+      notify("User deleted", "success");
+    } catch (err) {
+      notify("Delete failed: " + err.message, "error");
+    }
   };
 
   const exportUsersCSV = () => {
@@ -332,9 +357,9 @@ export default function AdminDashboard() {
         {activeTab === "users" && (
           <div>
             <div className="section-header">
-              <h2>Users & Marketing</h2>
+              <h2>Users & Marketing {isSupabaseConfigured && <span className="live-badge">● LIVE</span>}</h2>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="btn btn-small" onClick={loadAllData}>🔄 Refresh</button>
+                <button className="btn btn-small" onClick={refreshUsers}>🔄 Refresh</button>
                 <button className="btn btn-small" onClick={exportEmailsOnly}>📋 Copy Emails</button>
                 <button className="btn btn-gold" onClick={exportUsersCSV}>⬇ Export CSV</button>
               </div>
@@ -592,6 +617,8 @@ export default function AdminDashboard() {
         .user-row strong { color: #ffd700; }
         .user-head { background: #1a1a1a; font-weight: 600; color: rgba(255,215,0,0.7); text-transform: uppercase; font-size: 0.8rem; }
         .user-head span { color: rgba(255,215,0,0.7); }
+        .live-badge { font-size: 0.7rem; color: #4caf50; vertical-align: middle; margin-left: 0.5rem; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
     </div>
   );

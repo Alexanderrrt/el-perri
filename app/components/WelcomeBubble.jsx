@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import { signupUser, loginUser } from "@/lib/userStore";
 
 export default function WelcomeBubble() {
   const [showWelcome, setShowWelcome] = useState(true);
@@ -29,39 +30,8 @@ export default function WelcomeBubble() {
     }
 
     try {
-      // Read existing users from localStorage (shared with admin panel)
-      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-
-      // Check for duplicate email
-      if (users.some(u => u.email.toLowerCase() === signupData.email.toLowerCase())) {
-        throw new Error("Email already registered. Try signing in.");
-      }
-
-      const newUser = {
-        userId: Date.now().toString(),
-        email: signupData.email,
-        password: signupData.password, // demo only — hash in production
-        name: signupData.name || "User",
-        newsletter: true,
-        createdAt: new Date().toISOString(),
-      };
-
-      users.push(newUser);
-      localStorage.setItem("registeredUsers", JSON.stringify(users));
-
-      // Best-effort: also notify backend (non-blocking)
-      fetch("/api/auth/user-signup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(signupData)
-      }).catch(() => {});
-
-      sessionStorage.setItem("userAuth", JSON.stringify({
-        userId: newUser.userId,
-        email: newUser.email,
-        name: newUser.name
-      }));
-
+      const user = await signupUser(signupData);
+      sessionStorage.setItem("userAuth", JSON.stringify(user));
       setMessage("✓ Account created! Welcome!");
       setTimeout(() => setShowWelcome(false), 2000);
     } catch (error) {
@@ -83,21 +53,8 @@ export default function WelcomeBubble() {
     }
 
     try {
-      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
-      const user = users.find(
-        u => u.email.toLowerCase() === loginData.email.toLowerCase() && u.password === loginData.password
-      );
-
-      if (!user) {
-        throw new Error("Invalid email or password");
-      }
-
-      sessionStorage.setItem("userAuth", JSON.stringify({
-        userId: user.userId,
-        email: user.email,
-        name: user.name
-      }));
-
+      const user = await loginUser(loginData);
+      sessionStorage.setItem("userAuth", JSON.stringify(user));
       setMessage("✓ Logged in successfully!");
       setTimeout(() => setShowWelcome(false), 2000);
     } catch (error) {
