@@ -1,0 +1,117 @@
+name: Deploy to Production
+
+# Only trigger on merges to main
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+          cache: 'npm'
+
+      # 3. Install & build
+      - name: Install & Build
+        run: |
+          npm ci
+          npm run build
+
+      # ============================================
+      # OPTION A: Deploy to Vercel (recommended for Next.js)
+      # ============================================
+      # Uncomment this section if using Vercel
+      # (and add VERCEL_TOKEN + VERCEL_ORG_ID to GitHub Secrets)
+      #
+      # - name: Deploy to Vercel
+      #   env:
+      #     VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      #     VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      #     VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      #   run: |
+      #     npm install -g vercel
+      #     vercel deploy --prod --token $VERCEL_TOKEN
+
+      # ============================================
+      # OPTION B: Deploy to Netlify
+      # ============================================
+      # Uncomment this section if using Netlify
+      # (and add NETLIFY_AUTH_TOKEN + NETLIFY_SITE_ID to GitHub Secrets)
+      #
+      # - name: Deploy to Netlify
+      #   env:
+      #     NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+      #     NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+      #   run: |
+      #     npm install -g netlify-cli
+      #     netlify deploy --prod
+
+      # ============================================
+      # OPTION C: Deploy to AWS S3 + CloudFront
+      # ============================================
+      # Uncomment this section if using AWS
+      # (and add AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY to GitHub Secrets)
+      #
+      # - name: Deploy to S3
+      #   env:
+      #     AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      #     AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      #     AWS_REGION: us-east-1
+      #     S3_BUCKET: your-bucket-name
+      #   run: |
+      #     aws s3 sync out/ s3://$S3_BUCKET --delete
+
+      # ============================================
+      # OPTION D: Deploy via SSH to custom server
+      # ============================================
+      # Uncomment this section if hosting on your own server
+      # (and add SSH_PRIVATE_KEY + SSH_HOST to GitHub Secrets)
+      #
+      # - name: Deploy via SSH
+      #   env:
+      #     SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      #     SSH_HOST: ${{ secrets.SSH_HOST }}
+      #     SSH_USER: ${{ secrets.SSH_USER }}
+      #   run: |
+      #     mkdir -p ~/.ssh
+      #     echo "$SSH_PRIVATE_KEY" > ~/.ssh/deploy_key
+      #     chmod 600 ~/.ssh/deploy_key
+      #     ssh-keyscan -H $SSH_HOST >> ~/.ssh/known_hosts
+      #     scp -i ~/.ssh/deploy_key -r out/* $SSH_USER@$SSH_HOST:/var/www/el-perri/
+
+      # ============================================
+      # PLACEHOLDER: Add your deployment method above
+      # ============================================
+
+      # 4. Notify Slack / Discord (optional)
+      # - name: Notify deployment
+      #   if: success()
+      #   uses: slackapi/slack-github-action@v1
+      #   with:
+      #     payload: |
+      #       {
+      #         "text": "✅ El Perri deployed to production",
+      #         "blocks": [
+      #           {
+      #             "type": "section",
+      #             "text": {
+      #               "type": "mrkdwn",
+      #               "text": "*✅ El Perri Production Deploy*\nCommit: ${{ github.sha }}\nAuthor: ${{ github.actor }}"
+      #             }
+      #           }
+      #         ]
+      #       }
+      #   env:
+      #     SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+      #     SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

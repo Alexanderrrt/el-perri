@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirmación de Pedido - El Perri</title>
+  <style>
+    body { font-family: Arial, sans-serif; color: #333; line-height: 1.6; }
+    .container { max-width: 600px; margin: 0 auto; background: #fef2f2; padding: 20px; }
+    .header { background: #15110c; color: #fef2f2; padding: 20px; text-align: center; }
+    .content { background: white; padding: 20px; margin: 20px 0; }
+    .order-info { background: #f9f9f9; padding: 15px; border-left: 4px solid #e01f26; margin: 15px 0; }
+    .items-list { margin: 20px 0; }
+    .item-row { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #eee; }
+    .total { font-size: 18px; font-weight: bold; color: #0F6E56; margin: 15px 0; }
+    .cta-button { display: inline-block; background: #e01f26; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; }
+    .footer { background: #15110c; color: #fef2f2; padding: 15px; text-align: center; font-size: 12px; }
+    .footer a { color: #f5b301; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>¡Pedido Confirmado! 🌭</h1>
+      <p>El Perri Latin Food</p>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <p>¡Hola!</p>
+      <p>Tu pedido ha sido confirmado y está siendo preparado.</p>
+
+      <!-- Order Info -->
+      <div class="order-info">
+        <strong>Número de Pedido:</strong> {{orderNumber}}<br>
+        <strong>Tiempo Estimado:</strong> {{estimatedTime}}<br>
+        <strong>Dirección de Entrega:</strong> {{deliveryAddress}}<br>
+      </div>
+
+      <!-- Items -->
+      <div class="items-list">
+        <h3>Tu Pedido:</h3>
+        {{#items}}
+        <div class="item-row">
+          <span>{{name}} × {{quantity}}</span>
+          <span>${{price}}</span>
+        </div>
+        {{/items}}
+      </div>
+
+      <!-- Total -->
+      <div class="total">
+        Total: ${{total}}
+      </div>
+
+      <!-- CTA -->
+      <p>
+        <a href="{{trackingUrl}}" class="cta-button">Rastrear Tu Pedido</a>
+      </p>
+
+      <!-- Unsubscribe -->
+      <p style="font-size: 12px; color: #999;">
+        Recibiste este email porque realizaste un pedido en El Perri.
+        <a href="{{unsubscribeUrl}}" style="color: #999;">Gestionar Preferencias</a>
+      </p>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <p>© 2026 El Perri Latin Food | San Jose, CA</p>
+      <p>
+        <a href="tel:+14085822502">(408) 582-2502</a> |
+        <a href="https://elperrilatinfood.com">www.elperrilatinfood.com</a>
+      </p>
+      <p>
+        <a href="{{privacyPolicyUrl}}">Política de Privacidad</a> |
+        <a href="{{termsUrl}}">Términos de Servicio</a>
+      </p>
+    </div>
+  </div>
+</body>
+</html>
