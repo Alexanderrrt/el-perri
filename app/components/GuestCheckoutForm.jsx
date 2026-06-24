@@ -15,9 +15,12 @@ export function GuestCheckoutForm({ onSubmit, isLoading }) {
     phone: "",
     delivery_address: "",
     marketing_consent: true,
+    promo_code: "",
   });
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [promoApplied, setPromoApplied] = useState(null);
+  const [promoDiscount, setPromoDiscount] = useState(0);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -26,6 +29,30 @@ export function GuestCheckoutForm({ onSubmit, isLoading }) {
       [name]: type === "checkbox" ? checked : value,
     }));
     setError(null);
+  };
+
+  const validatePromoCode = async () => {
+    if (!formData.promo_code.trim()) {
+      setError("Please enter a promo code");
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/admin/promotions?code=${encodeURIComponent(formData.promo_code)}`);
+      if (!res.ok) {
+        setError("Invalid or expired promo code");
+        setPromoApplied(null);
+        setPromoDiscount(0);
+        return;
+      }
+      const data = await res.json();
+      const promo = data.promo;
+      setPromoApplied(promo.code);
+      setPromoDiscount(promo.discount);
+      setError(null);
+    } catch (err) {
+      setError("Failed to validate promo code");
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -39,9 +66,16 @@ export function GuestCheckoutForm({ onSubmit, isLoading }) {
     }
 
     try {
-      await onSubmit(formData);
+      const orderData = {
+        ...formData,
+        discount_code: promoApplied,
+        discount_percent: promoDiscount
+      };
+      await onSubmit(orderData);
       setSuccess(true);
-      setFormData({ email: "", phone: "", delivery_address: "", marketing_consent: true });
+      setFormData({ email: "", phone: "", delivery_address: "", marketing_consent: true, promo_code: "" });
+      setPromoApplied(null);
+      setPromoDiscount(0);
     } catch (err) {
       setError(err.message || "Failed to process order");
     }
@@ -99,6 +133,38 @@ export function GuestCheckoutForm({ onSubmit, isLoading }) {
           required
           disabled={isLoading}
         />
+      </div>
+
+      <div className="form-divider"></div>
+
+      <div className="form-group">
+        <label htmlFor="promo_code">Promo Code (Optional)</label>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            id="promo_code"
+            name="promo_code"
+            placeholder="Enter code: WELCOME, FRIENDS..."
+            value={formData.promo_code}
+            onChange={handleChange}
+            disabled={isLoading || promoApplied}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            onClick={validatePromoCode}
+            disabled={isLoading || promoApplied || !formData.promo_code.trim()}
+            className="btn btn-small"
+            style={{ whiteSpace: "nowrap" }}
+          >
+            Apply
+          </button>
+        </div>
+        {promoApplied && (
+          <p className="form-hint" style={{ color: "#4caf50", marginTop: "8px" }}>
+            ✓ {promoApplied}: {promoDiscount}% off applied
+          </p>
+        )}
       </div>
 
       <div className="form-divider"></div>
