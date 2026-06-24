@@ -13,6 +13,8 @@ export default function AdminDashboard() {
 
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [userSearch, setUserSearch] = useState("");
 
   const [inventory, setInventory] = useState([]);
   const [showAddInventory, setShowAddInventory] = useState(false);
@@ -47,6 +49,7 @@ export default function AdminDashboard() {
     const inv = localStorage.getItem("inventory");
     const stf = localStorage.getItem("staff");
     const promo = localStorage.getItem("promotions");
+    const regUsers = localStorage.getItem("registeredUsers");
 
     if (items) setMenuItems(JSON.parse(items));
     if (ordr) setOrders(JSON.parse(ordr));
@@ -54,6 +57,55 @@ export default function AdminDashboard() {
     if (inv) setInventory(JSON.parse(inv));
     if (stf) setStaff(JSON.parse(stf));
     if (promo) setPromotions(JSON.parse(promo));
+    if (regUsers) setUsers(JSON.parse(regUsers));
+  };
+
+  const deleteUser = (userId) => {
+    const updated = users.filter(u => u.userId !== userId);
+    if (typeof window !== "undefined") localStorage.setItem("registeredUsers", JSON.stringify(updated));
+    setUsers(updated);
+    notify("User deleted", "success");
+  };
+
+  const exportUsersCSV = () => {
+    if (users.length === 0) {
+      notify("No users to export", "error");
+      return;
+    }
+    const headers = ["Email", "Name", "Newsletter", "Signed Up"];
+    const rows = users.map(u => [
+      u.email,
+      u.name || "N/A",
+      u.newsletter ? "Yes" : "No",
+      u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"
+    ]);
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `el-perri-users-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify(`Exported ${users.length} users for marketing`, "success");
+  };
+
+  const exportEmailsOnly = () => {
+    if (users.length === 0) {
+      notify("No users to export", "error");
+      return;
+    }
+    const emails = users.map(u => u.email).join(", ");
+    navigator.clipboard.writeText(emails).then(() => {
+      notify(`Copied ${users.length} emails to clipboard`, "success");
+    }).catch(() => {
+      notify("Could not copy to clipboard", "error");
+    });
   };
 
   const notify = (message, type = "success") => {
@@ -177,6 +229,7 @@ export default function AdminDashboard() {
         <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Orders</button>
         <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Analytics</button>
         <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Customers</button>
+        <button className={`tab-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")}>📧 Users & Marketing</button>
         <button className={`tab-btn ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}>📦 Inventory</button>
         <button className={`tab-btn ${activeTab === "staff" ? "active" : ""}`} onClick={() => setActiveTab("staff")}>👔 Staff</button>
         <button className={`tab-btn ${activeTab === "promotions" ? "active" : ""}`} onClick={() => setActiveTab("promotions")}>🎁 Promotions</button>
@@ -271,6 +324,61 @@ export default function AdminDashboard() {
                 {customers.map(cust => (
                   <div key={cust.id} className="card"><strong>{cust.name}</strong><p>{cust.email}</p><p className="small">Orders: {cust.orders}</p></div>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === "users" && (
+          <div>
+            <div className="section-header">
+              <h2>Users & Marketing</h2>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button className="btn btn-small" onClick={loadAllData}>🔄 Refresh</button>
+                <button className="btn btn-small" onClick={exportEmailsOnly}>📋 Copy Emails</button>
+                <button className="btn btn-gold" onClick={exportUsersCSV}>⬇ Export CSV</button>
+              </div>
+            </div>
+
+            <div className="stats-grid" style={{ marginBottom: "2rem" }}>
+              <div className="stat"><h3>Total Users</h3><p className="value">{users.length}</p></div>
+              <div className="stat"><h3>Newsletter Opt-In</h3><p className="value">{users.filter(u => u.newsletter).length}</p></div>
+              <div className="stat"><h3>This Week</h3><p className="value">{users.filter(u => u.createdAt && (Date.now() - new Date(u.createdAt).getTime()) < 7 * 864e5).length}</p></div>
+            </div>
+
+            <input
+              placeholder="Search by email or name..."
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              style={{ width: "100%", maxWidth: "400px", marginBottom: "1.5rem", background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.2)", color: "#fff", padding: "0.75rem", borderRadius: "4px" }}
+            />
+
+            {users.length === 0 ? (
+              <p className="empty-state">No registered users yet. When guests sign up via the welcome bubble, they appear here.</p>
+            ) : (
+              <div className="user-table">
+                <div className="user-row user-head">
+                  <span>Name</span>
+                  <span>Email</span>
+                  <span>Newsletter</span>
+                  <span>Joined</span>
+                  <span></span>
+                </div>
+                {users
+                  .filter(u =>
+                    !userSearch ||
+                    u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
+                    (u.name || "").toLowerCase().includes(userSearch.toLowerCase())
+                  )
+                  .map(user => (
+                    <div key={user.userId} className="user-row">
+                      <span><strong>{user.name}</strong></span>
+                      <span>{user.email}</span>
+                      <span>{user.newsletter ? "✅ Yes" : "—"}</span>
+                      <span className="small">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}</span>
+                      <span><button className="btn btn-small btn-danger" onClick={() => deleteUser(user.userId)}>Delete</button></span>
+                    </div>
+                  ))}
               </div>
             )}
           </div>
@@ -478,6 +586,12 @@ export default function AdminDashboard() {
         .btn-danger:hover { background: #ff6666; }
         .actions { display: flex; gap: 0.5rem; margin-top: auto; }
         .empty-state { text-align: center; color: rgba(255,255,255,0.5); padding: 3rem 1rem; font-style: italic; }
+        .user-table { display: flex; flex-direction: column; gap: 0; border: 1px solid rgba(255,215,0,0.2); border-radius: 8px; overflow: hidden; }
+        .user-row { display: grid; grid-template-columns: 1.5fr 2fr 1fr 1fr 100px; gap: 1rem; padding: 1rem; align-items: center; border-bottom: 1px solid rgba(255,215,0,0.1); }
+        .user-row:last-child { border-bottom: none; }
+        .user-row strong { color: #ffd700; }
+        .user-head { background: #1a1a1a; font-weight: 600; color: rgba(255,215,0,0.7); text-transform: uppercase; font-size: 0.8rem; }
+        .user-head span { color: rgba(255,215,0,0.7); }
       `}</style>
     </div>
   );

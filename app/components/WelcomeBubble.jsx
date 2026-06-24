@@ -29,22 +29,37 @@ export default function WelcomeBubble() {
     }
 
     try {
-      const response = await fetch("/api/auth/user-signup", {
+      // Read existing users from localStorage (shared with admin panel)
+      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+
+      // Check for duplicate email
+      if (users.some(u => u.email.toLowerCase() === signupData.email.toLowerCase())) {
+        throw new Error("Email already registered. Try signing in.");
+      }
+
+      const newUser = {
+        userId: Date.now().toString(),
+        email: signupData.email,
+        password: signupData.password, // demo only — hash in production
+        name: signupData.name || "User",
+        newsletter: true,
+        createdAt: new Date().toISOString(),
+      };
+
+      users.push(newUser);
+      localStorage.setItem("registeredUsers", JSON.stringify(users));
+
+      // Best-effort: also notify backend (non-blocking)
+      fetch("/api/auth/user-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(signupData)
-      });
+      }).catch(() => {});
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Signup failed");
-      }
-
-      const data = await response.json();
       sessionStorage.setItem("userAuth", JSON.stringify({
-        userId: data.userId,
-        email: data.email,
-        name: data.name
+        userId: newUser.userId,
+        email: newUser.email,
+        name: newUser.name
       }));
 
       setMessage("✓ Account created! Welcome!");
@@ -68,22 +83,19 @@ export default function WelcomeBubble() {
     }
 
     try {
-      const response = await fetch("/api/auth/user-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(loginData)
-      });
+      const users = JSON.parse(localStorage.getItem("registeredUsers") || "[]");
+      const user = users.find(
+        u => u.email.toLowerCase() === loginData.email.toLowerCase() && u.password === loginData.password
+      );
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Login failed");
+      if (!user) {
+        throw new Error("Invalid email or password");
       }
 
-      const data = await response.json();
       sessionStorage.setItem("userAuth", JSON.stringify({
-        userId: data.userId,
-        email: data.email,
-        name: data.name
+        userId: user.userId,
+        email: user.email,
+        name: user.name
       }));
 
       setMessage("✓ Logged in successfully!");
