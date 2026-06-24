@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { listUsers, deleteUserById } from "@/lib/userStore";
 import { listMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, subscribeToMenu } from "@/lib/menuStore";
+import { listDailySubscribers, deleteSubscriber, getDailySpecial, setDailySpecial } from "@/lib/lunchStore";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
@@ -18,6 +19,11 @@ export default function AdminDashboard() {
   const [customers, setCustomers] = useState([]);
   const [users, setUsers] = useState([]);
   const [userSearch, setUserSearch] = useState("");
+
+  const [lunchText, setLunchText] = useState("");
+  const [lunchSubs, setLunchSubs] = useState([]);
+  const [savingLunch, setSavingLunch] = useState(false);
+  const [sendingLunch, setSendingLunch] = useState(false);
 
   const [inventory, setInventory] = useState([]);
   const [showAddInventory, setShowAddInventory] = useState(false);
@@ -44,6 +50,7 @@ export default function AdminDashboard() {
     loadAllData();
     refreshUsers();
     refreshMenu();
+    refreshLunch();
 
     // Real-time: changes on ANY device update these tables live
     if (isSupabaseConfigured) {
@@ -84,6 +91,85 @@ export default function AdminDashboard() {
     } catch (err) {
       notify("No se pudo cargar el menú: " + err.message, "error");
     }
+  };
+
+  const refreshLunch = async () => {
+    try {
+      const [special, subs] = await Promise.all([getDailySpecial(), listDailySubscribers()]);
+      setLunchText(special.lunch || "");
+      setLunchSubs(subs);
+    } catch (err) {
+      notify("No se pudo cargar el almuerzo del día: " + err.message, "error");
+    }
+  };
+
+  const saveLunch = async () => {
+    if (!lunchText.trim()) {
+      notify("Escribe el almuerzo del día primero", "error");
+      return;
+    }
+    setSavingLunch(true);
+    try {
+      await setDailySpecial(lunchText);
+      notify("✓ Almuerzo del día guardado", "success");
+    } catch (err) {
+      notify("No se pudo guardar: " + err.message, "error");
+    } finally {
+      setSavingLunch(false);
+    }
+  };
+
+  const removeLunchSub = async (id) => {
+    if (typeof window !== "undefined" && !window.confirm("¿Quitar este suscriptor?")) return;
+    try {
+      await deleteSubscriber(id);
+      await refreshLunch();
+      notify("Suscriptor eliminado", "success");
+    } catch (err) {
+      notify("No se pudo eliminar: " + err.message, "error");
+    }
+  };
+
+  const sendLunchNow = async () => {
+    if (!lunchText.trim()) {
+      notify("Primero guarda el almuerzo del día", "error");
+      return;
+    }
+    const secret = typeof window !== "undefined"
+      ? window.prompt("Para enviar el correo ahora, escribe tu CRON_SECRET (de Vercel):")
+      : null;
+    if (!secret) return;
+    setSendingLunch(true);
+    try {
+      const res = await fetch("/api/cron/daily-lunch", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${secret}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falló el envío");
+      notify(`✓ Correo enviado a ${data.sent} suscriptores`, "success");
+    } catch (err) {
+      notify("No se pudo enviar: " + err.message, "error");
+    } finally {
+      setSendingLunch(false);
+    }
+  };
+
+  const exportLunchCSV = () => {
+    if (lunchSubs.length === 0) { notify("No hay suscriptores para exportar", "error"); return; }
+    const headers = ["Correo", "Nombre", "Registrado"];
+    const rows = lunchSubs.map((s) => [s.email, s.name || "N/A", s.created_at ? new Date(s.created_at).toLocaleDateString() : "N/A"]);
+    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `el-perri-almuerzo-suscriptores-${new Date().toISOString().split("T")[0]}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify(`Se exportaron ${lunchSubs.length} suscriptores`, "success");
   };
 
   const refreshUsers = async () => {
@@ -285,6 +371,7 @@ export default function AdminDashboard() {
 
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
+        <button className={`tab-btn ${activeTab === "lunch" ? "active" : ""}`} onClick={() => setActiveTab("lunch")}>🍽️ Almuerzo del día</button>
         <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Pedidos</button>
         <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Estadísticas</button>
         <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Clientes</button>
@@ -335,6 +422,62 @@ export default function AdminDashboard() {
                 ))
               )}
             </div>
+          </div>
+        )}
+
+        {activeTab === "lunch" && (
+          <div>
+            <div className="section-header">
+              <h2>Almuerzo del Día {isSupabaseConfigured && <span className="live-badge">● EN VIVO</span>}</h2>
+            </div>
+            <p className="hint-text">Escribe el almuerzo de hoy y guárdalo. Cada mañana se envía por correo a los suscriptores. También puedes enviarlo ahora mismo.</p>
+
+            <div className="form-section">
+              <label style={{ color: "#ffd700", fontWeight: 600, fontSize: "0.9rem" }}>¿Cuál es el almuerzo de hoy?</label>
+              <textarea
+                placeholder="Ej: Bandeja paisa con frijoles, arroz, carne, chicharrón, huevo, maduro y arepa. Incluye jugo natural — $15"
+                value={lunchText}
+                onChange={(e) => setLunchText(e.target.value)}
+                style={{ minHeight: "100px" }}
+              ></textarea>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button className="btn btn-gold" onClick={saveLunch} disabled={savingLunch}>
+                  {savingLunch ? "Guardando..." : "Guardar almuerzo de hoy"}
+                </button>
+                <button className="btn btn-small" onClick={sendLunchNow} disabled={sendingLunch}>
+                  {sendingLunch ? "Enviando..." : "📩 Enviar correo ahora"}
+                </button>
+              </div>
+            </div>
+
+            <div className="section-header" style={{ marginTop: "2rem" }}>
+              <h3 style={{ color: "#ffd700" }}>Suscriptores del almuerzo ({lunchSubs.length})</h3>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <button className="btn btn-small" onClick={refreshLunch}>🔄 Actualizar</button>
+                <button className="btn btn-gold" onClick={exportLunchCSV}>⬇ Exportar CSV</button>
+              </div>
+            </div>
+
+            {lunchSubs.length === 0 ? (
+              <p className="empty-state">Aún no hay suscriptores. Cuando alguien pida el almuerzo del día en la burbuja de bienvenida, aparecerá aquí.</p>
+            ) : (
+              <div className="user-table">
+                <div className="user-row user-head" style={{ gridTemplateColumns: "1.5fr 2fr 1fr 100px" }}>
+                  <span>Nombre</span>
+                  <span>Correo</span>
+                  <span>Registro</span>
+                  <span></span>
+                </div>
+                {lunchSubs.map((s) => (
+                  <div key={s.id} className="user-row" style={{ gridTemplateColumns: "1.5fr 2fr 1fr 100px" }}>
+                    <span><strong>{s.name}</strong></span>
+                    <span>{s.email}</span>
+                    <span className="small">{s.created_at ? new Date(s.created_at).toLocaleDateString() : "N/A"}</span>
+                    <span><button className="btn btn-small btn-danger" onClick={() => removeLunchSub(s.id)}>Eliminar</button></span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

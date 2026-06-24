@@ -1,10 +1,13 @@
 "use client";
 import { useState, useEffect } from "react";
 import { signupUser, loginUser } from "@/lib/userStore";
+import { subscribeDailyLunch } from "@/lib/lunchStore";
 
 export default function WelcomeBubble() {
   const [showWelcome, setShowWelcome] = useState(true);
-  const [mode, setMode] = useState("menu"); // 'menu' | 'signup' | 'login'
+  const [mode, setMode] = useState("lunch"); // 'lunch' | 'signup' | 'login'
+  const [lunchData, setLunchData] = useState({ email: "", name: "" });
+  const [lunchDone, setLunchDone] = useState(false);
   const [signupData, setSignupData] = useState({ email: "", password: "", name: "" });
   const [loginData, setLoginData] = useState({ email: "", password: "" });
   const [message, setMessage] = useState("");
@@ -17,6 +20,27 @@ export default function WelcomeBubble() {
       setShowWelcome(false);
     }
   }, []);
+
+  const handleLunchSubscribe = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage("");
+
+    if (!lunchData.email) {
+      setMessage("Escribe tu correo para recibir el almuerzo del día");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await subscribeDailyLunch(lunchData);
+      setLunchDone(true);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -72,24 +96,54 @@ export default function WelcomeBubble() {
         <div className="flag-bar" aria-hidden="true"><span /><span /><span /></div>
         <button className="close-btn" onClick={() => setShowWelcome(false)}>✕</button>
 
-        {mode === "menu" && (
+        {mode === "lunch" && !lunchDone && (
           <div className="welcome-content">
-            <div className="welcome-icon">🌮</div>
-            <h2>¡Bienvenido a El Perri!</h2>
-            <p>Sabor colombiano de verdad — de Colombia pal mundo.</p>
+            <div className="welcome-icon">🍽️</div>
+            <h2>¿Quieres saber el almuerzo de hoy?</h2>
+            <p>Déjanos tu correo y cada día te mandamos el <strong>almuerzo del día</strong> de El Perri. Sin spam, solo el menú.</p>
 
-            <div className="welcome-buttons">
-              <button className="btn-mode btn-primary-co" onClick={() => setMode("signup")}>
-                Crear cuenta
+            {message && <div className="form-error">{message}</div>}
+
+            <form onSubmit={handleLunchSubscribe} className="subscribe-form">
+              <input
+                type="text"
+                placeholder="Tu nombre (opcional)"
+                value={lunchData.name}
+                onChange={(e) => setLunchData({ ...lunchData, name: e.target.value })}
+                disabled={isLoading}
+              />
+              <input
+                type="email"
+                placeholder="Tu correo electrónico"
+                value={lunchData.email}
+                onChange={(e) => setLunchData({ ...lunchData, email: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+              <button type="submit" className="btn-subscribe" disabled={isLoading}>
+                {isLoading ? "Suscribiendo..." : "📩 Mándame el almuerzo del día"}
               </button>
-              <button className="btn-mode btn-outline-co" onClick={() => setMode("login")}>
-                Ya tengo cuenta
-              </button>
+            </form>
+
+            <div className="welcome-secondary">
+              <span>¿Prefieres una cuenta?</span>
+              <button className="link-btn" onClick={() => { setMessage(""); setMode("signup"); }}>Crear cuenta</button>
+              <span>·</span>
+              <button className="link-btn" onClick={() => { setMessage(""); setMode("login"); }}>Iniciar sesión</button>
             </div>
 
             <button className="btn-skip" onClick={() => setShowWelcome(false)}>
               Ahora no, gracias
             </button>
+          </div>
+        )}
+
+        {mode === "lunch" && lunchDone && (
+          <div className="welcome-content">
+            <div className="welcome-icon">✅</div>
+            <h2>¡Listo, {lunchData.name || "parcero"}!</h2>
+            <p>Desde mañana te llega el <strong>almuerzo del día</strong> a <strong>{lunchData.email}</strong>. ¡Buen provecho! 🇨🇴</p>
+            <button className="btn-subscribe" onClick={() => setShowWelcome(false)}>Cerrar</button>
           </div>
         )}
 
@@ -130,7 +184,7 @@ export default function WelcomeBubble() {
               </button>
             </form>
 
-            <button className="btn-back" onClick={() => setMode("menu")}>← Volver</button>
+            <button className="btn-back" onClick={() => { setMessage(""); setMode("lunch"); }}>← Volver</button>
           </div>
         )}
 
@@ -164,7 +218,7 @@ export default function WelcomeBubble() {
               </button>
             </form>
 
-            <button className="btn-back" onClick={() => setMode("menu")}>← Volver</button>
+            <button className="btn-back" onClick={() => { setMessage(""); setMode("lunch"); }}>← Volver</button>
           </div>
         )}
       </div>
@@ -227,6 +281,28 @@ export default function WelcomeBubble() {
           border: 2px solid #003893;
         }
         .btn-outline-co:hover { background: #003893; color: #fff; }
+
+        .welcome-secondary {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 0.4rem;
+          font-size: 0.85rem;
+          color: #777;
+          margin-bottom: 1rem;
+        }
+        .link-btn {
+          background: none;
+          border: none;
+          color: #003893;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 0.85rem;
+          padding: 0;
+          text-decoration: underline;
+        }
+        .link-btn:hover { color: #ce1126; }
 
         @keyframes bubbleIn {
           0% {

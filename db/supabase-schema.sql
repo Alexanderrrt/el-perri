@@ -38,13 +38,22 @@ create table if not exists orders (
   created_at  timestamptz default now()
 );
 
--- ---------- subscribers (newsletter-only opt-ins) ----------
+-- ---------- subscribers (newsletter / daily-lunch opt-ins) ----------
 create table if not exists subscribers (
   id          uuid primary key default gen_random_uuid(),
   email       text unique not null,
   name        text default 'Subscriber',
+  daily_lunch boolean default true,
   created_at  timestamptz default now()
 );
+
+-- ---------- daily_special (the "menú del día") ----------
+create table if not exists daily_special (
+  id         text primary key default 'current',
+  lunch      text default '',
+  updated_at timestamptz default now()
+);
+insert into daily_special (id, lunch) values ('current', '') on conflict (id) do nothing;
 
 -- ---------- promotions ----------
 create table if not exists promotions (
@@ -69,12 +78,13 @@ alter table menu_items       enable row level security;
 alter table orders           enable row level security;
 alter table subscribers      enable row level security;
 alter table promotions       enable row level security;
+alter table daily_special    enable row level security;
 
 -- helper: drop a policy if it exists, then create
 do $$
 declare t text;
 begin
-  foreach t in array array['registered_users','menu_items','orders','subscribers','promotions']
+  foreach t in array array['registered_users','menu_items','orders','subscribers','promotions','daily_special']
   loop
     execute format('drop policy if exists "anon_all_%1$s" on %1$s;', t);
     execute format('create policy "anon_all_%1$s" on %1$s for all using (true) with check (true);', t);
@@ -88,6 +98,7 @@ alter publication supabase_realtime add table registered_users;
 alter publication supabase_realtime add table menu_items;
 alter publication supabase_realtime add table orders;
 alter publication supabase_realtime add table promotions;
+alter publication supabase_realtime add table daily_special;
 
 -- ============================================================
 -- Seed the full menu (idempotent upsert)
