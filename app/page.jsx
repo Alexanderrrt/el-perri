@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Slot, Reveal, OrderButton, InstagramReels } from "./components";
 import WelcomeBubble from "./components/WelcomeBubble";
+import AdminShortcut from "./components/AdminShortcut";
 import { FEATURED, MENU_GROUPS, SITE, GALLERY, VIDEO, REELS } from "./site.config";
 
 const IgIcon = () => (
@@ -22,6 +23,7 @@ const MARQUEE = [
 export default function Home() {
   return (
     <>
+      <AdminShortcut />
       <WelcomeBubble />
       <main>
       {/* HERO */}
