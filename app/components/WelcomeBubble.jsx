@@ -2,38 +2,96 @@
 import { useState, useEffect } from "react";
 
 export default function WelcomeBubble() {
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [formData, setFormData] = useState({ email: "", name: "" });
-  const [subscribed, setSubscribed] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(true);
+  const [mode, setMode] = useState("menu"); // 'menu' | 'signup' | 'login'
+  const [signupData, setSignupData] = useState({ email: "", password: "", name: "" });
+  const [loginData, setLoginData] = useState({ email: "", password: "" });
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const visited = localStorage.getItem("elPerriVisited");
-    if (!visited) {
-      setTimeout(() => setShowWelcome(true), 2000);
-      localStorage.setItem("elPerriVisited", "true");
+    // Check if user is logged in
+    const userAuth = sessionStorage.getItem("userAuth");
+    if (userAuth) {
+      setShowWelcome(false);
     }
   }, []);
 
-  const handleSubscribe = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
-    if (!formData.email) {
-      alert("Please enter your email");
+    setIsLoading(true);
+    setMessage("");
+
+    if (!signupData.email || !signupData.password) {
+      setMessage("Email and password required");
+      setIsLoading(false);
       return;
     }
 
     try {
-      const response = await fetch("/api/subscribers", {
+      const response = await fetch("/api/auth/user-signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(signupData)
       });
 
-      if (response.ok) {
-        setSubscribed(true);
-        setTimeout(() => setShowWelcome(false), 2000);
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Signup failed");
       }
+
+      const data = await response.json();
+      sessionStorage.setItem("userAuth", JSON.stringify({
+        userId: data.userId,
+        email: data.email,
+        name: data.name
+      }));
+
+      setMessage("✓ Account created! Welcome!");
+      setTimeout(() => setShowWelcome(false), 2000);
     } catch (error) {
-      console.error("Subscription error:", error);
+      setMessage(error.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setMessage("");
+
+    if (!loginData.email || !loginData.password) {
+      setMessage("Email and password required");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/auth/user-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(loginData)
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Login failed");
+      }
+
+      const data = await response.json();
+      sessionStorage.setItem("userAuth", JSON.stringify({
+        userId: data.userId,
+        email: data.email,
+        name: data.name
+      }));
+
+      setMessage("✓ Logged in successfully!");
+      setTimeout(() => setShowWelcome(false), 2000);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -44,38 +102,105 @@ export default function WelcomeBubble() {
       <div className="welcome-bubble">
         <button className="close-btn" onClick={() => setShowWelcome(false)}>✕</button>
 
-        {!subscribed ? (
+        {mode === "menu" && (
           <div className="welcome-content">
             <div className="welcome-icon">🌮</div>
             <h2>Welcome to El Perri!</h2>
             <p>Experience authentic Latin cuisine at its finest.</p>
 
-            <form onSubmit={handleSubscribe} className="subscribe-form">
-              <input
-                type="text"
-                placeholder="Your name (optional)"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              />
-              <input
-                type="email"
-                placeholder="Your email"
-                value={formData.email}
-                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                required
-              />
-              <button type="submit" className="btn-subscribe">Get Updates & Offers</button>
-            </form>
+            <div className="welcome-buttons">
+              <button
+                className="btn-mode"
+                onClick={() => setMode("signup")}
+                style={{ background: "#ffd700", color: "#000" }}
+              >
+                Create Account
+              </button>
+              <button
+                className="btn-mode"
+                onClick={() => setMode("login")}
+                style={{ background: "transparent", color: "#000", border: "2px solid #000" }}
+              >
+                Sign In
+              </button>
+            </div>
 
             <button className="btn-skip" onClick={() => setShowWelcome(false)}>
               Skip for now
             </button>
           </div>
-        ) : (
-          <div className="welcome-success">
-            <div className="success-icon">✓</div>
-            <h2>Thank You!</h2>
-            <p>You're all set. Enjoy your visit!</p>
+        )}
+
+        {mode === "signup" && (
+          <div className="welcome-content">
+            <h2>Create Account</h2>
+            <p>Join El Perri and get exclusive offers!</p>
+
+            {message && <div className={message.includes("✓") ? "form-success" : "form-error"}>{message}</div>}
+
+            <form onSubmit={handleSignup} className="subscribe-form">
+              <input
+                type="text"
+                placeholder="Your name"
+                value={signupData.name}
+                onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
+                disabled={isLoading}
+              />
+              <input
+                type="email"
+                placeholder="Email address"
+                value={signupData.email}
+                onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={signupData.password}
+                onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+              <button type="submit" className="btn-subscribe" disabled={isLoading}>
+                {isLoading ? "Creating..." : "Create Account"}
+              </button>
+            </form>
+
+            <button className="btn-back" onClick={() => setMode("menu")}>← Back</button>
+          </div>
+        )}
+
+        {mode === "login" && (
+          <div className="welcome-content">
+            <h2>Sign In</h2>
+            <p>Welcome back!</p>
+
+            {message && <div className={message.includes("✓") ? "form-success" : "form-error"}>{message}</div>}
+
+            <form onSubmit={handleLogin} className="subscribe-form">
+              <input
+                type="email"
+                placeholder="Email address"
+                value={loginData.email}
+                onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+              <input
+                type="password"
+                placeholder="Password"
+                value={loginData.password}
+                onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
+                required
+                disabled={isLoading}
+              />
+              <button type="submit" className="btn-subscribe" disabled={isLoading}>
+                {isLoading ? "Signing in..." : "Sign In"}
+              </button>
+            </form>
+
+            <button className="btn-back" onClick={() => setMode("menu")}>← Back</button>
           </div>
         )}
       </div>
@@ -218,25 +343,62 @@ export default function WelcomeBubble() {
           border-color: #000;
         }
 
-        .welcome-success {
-          text-align: center;
+        .welcome-buttons {
+          display: flex;
+          gap: 1rem;
+          margin: 1.5rem 0;
         }
 
-        .success-icon {
-          font-size: 3rem;
-          color: #4caf50;
-          margin-bottom: 1rem;
+        .btn-mode {
+          flex: 1;
+          padding: 0.875rem;
+          border: none;
+          border-radius: 8px;
+          font-weight: 600;
+          cursor: pointer;
+          font-size: 1rem;
+          transition: all 0.2s;
         }
 
-        .welcome-success h2 {
-          margin: 0 0 0.5rem 0;
-          font-size: 1.6rem;
-          color: #000;
+        .btn-mode:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         }
 
-        .welcome-success p {
+        .btn-back {
+          width: 100%;
+          padding: 0.75rem;
+          background: transparent;
           color: #666;
-          margin: 0;
+          border: 1px solid #ddd;
+          border-radius: 8px;
+          cursor: pointer;
+          font-weight: 500;
+          margin-top: 1rem;
+          transition: all 0.2s;
+        }
+
+        .btn-back:hover {
+          color: #000;
+          border-color: #000;
+        }
+
+        .form-error {
+          background: #ffebee;
+          color: #c62828;
+          padding: 0.75rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+          font-size: 0.9rem;
+        }
+
+        .form-success {
+          background: #e8f5e9;
+          color: #2e7d32;
+          padding: 0.75rem;
+          border-radius: 8px;
+          margin-bottom: 1rem;
+          font-size: 0.9rem;
         }
       `}</style>
     </div>
