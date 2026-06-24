@@ -69,55 +69,49 @@ export default function WelcomeBubble() {
   return (
     <div className="welcome-overlay">
       <div className="welcome-bubble">
+        <div className="flag-bar" aria-hidden="true"><span /><span /><span /></div>
         <button className="close-btn" onClick={() => setShowWelcome(false)}>✕</button>
 
         {mode === "menu" && (
           <div className="welcome-content">
             <div className="welcome-icon">🌮</div>
-            <h2>Welcome to El Perri!</h2>
-            <p>Experience authentic Latin cuisine at its finest.</p>
+            <h2>¡Bienvenido a El Perri!</h2>
+            <p>Sabor colombiano de verdad — de Colombia pal mundo.</p>
 
             <div className="welcome-buttons">
-              <button
-                className="btn-mode"
-                onClick={() => setMode("signup")}
-                style={{ background: "#ffd700", color: "#000" }}
-              >
-                Create Account
+              <button className="btn-mode btn-primary-co" onClick={() => setMode("signup")}>
+                Crear cuenta
               </button>
-              <button
-                className="btn-mode"
-                onClick={() => setMode("login")}
-                style={{ background: "transparent", color: "#000", border: "2px solid #000" }}
-              >
-                Sign In
+              <button className="btn-mode btn-outline-co" onClick={() => setMode("login")}>
+                Ya tengo cuenta
               </button>
             </div>
 
             <button className="btn-skip" onClick={() => setShowWelcome(false)}>
-              Skip for now
+              Ahora no, gracias
             </button>
           </div>
         )}
 
         {mode === "signup" && (
           <div className="welcome-content">
-            <h2>Create Account</h2>
-            <p>Join El Perri and get exclusive offers!</p>
+            <div className="welcome-icon">🎉</div>
+            <h2>Crear cuenta</h2>
+            <p>Únete a la familia El Perri y recibe ofertas exclusivas.</p>
 
             {message && <div className={message.includes("✓") ? "form-success" : "form-error"}>{message}</div>}
 
             <form onSubmit={handleSignup} className="subscribe-form">
               <input
                 type="text"
-                placeholder="Your name"
+                placeholder="Tu nombre"
                 value={signupData.name}
                 onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
                 disabled={isLoading}
               />
               <input
                 type="email"
-                placeholder="Email address"
+                placeholder="Correo electrónico"
                 value={signupData.email}
                 onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
                 required
@@ -125,32 +119,33 @@ export default function WelcomeBubble() {
               />
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="Contraseña"
                 value={signupData.password}
                 onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
                 required
                 disabled={isLoading}
               />
               <button type="submit" className="btn-subscribe" disabled={isLoading}>
-                {isLoading ? "Creating..." : "Create Account"}
+                {isLoading ? "Creando..." : "Crear mi cuenta"}
               </button>
             </form>
 
-            <button className="btn-back" onClick={() => setMode("menu")}>← Back</button>
+            <button className="btn-back" onClick={() => setMode("menu")}>← Volver</button>
           </div>
         )}
 
         {mode === "login" && (
           <div className="welcome-content">
-            <h2>Sign In</h2>
-            <p>Welcome back!</p>
+            <div className="welcome-icon">👋</div>
+            <h2>Iniciar sesión</h2>
+            <p>¡Qué bueno verte de nuevo!</p>
 
             {message && <div className={message.includes("✓") ? "form-success" : "form-error"}>{message}</div>}
 
             <form onSubmit={handleLogin} className="subscribe-form">
               <input
                 type="email"
-                placeholder="Email address"
+                placeholder="Correo electrónico"
                 value={loginData.email}
                 onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
                 required
@@ -158,18 +153,18 @@ export default function WelcomeBubble() {
               />
               <input
                 type="password"
-                placeholder="Password"
+                placeholder="Contraseña"
                 value={loginData.password}
                 onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                 required
                 disabled={isLoading}
               />
               <button type="submit" className="btn-subscribe" disabled={isLoading}>
-                {isLoading ? "Signing in..." : "Sign In"}
+                {isLoading ? "Entrando..." : "Entrar"}
               </button>
             </form>
 
-            <button className="btn-back" onClick={() => setMode("menu")}>← Back</button>
+            <button className="btn-back" onClick={() => setMode("menu")}>← Volver</button>
           </div>
         )}
       </div>
@@ -195,15 +190,43 @@ export default function WelcomeBubble() {
         }
 
         .welcome-bubble {
-          background: #fff;
-          border-radius: 16px;
-          padding: 3rem 2rem;
+          background: #fffdf7;
+          border-radius: 20px;
+          padding: 3rem 2rem 2.25rem;
           max-width: 420px;
           width: 90%;
-          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+          box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
           position: relative;
+          overflow: hidden;
           animation: bubbleIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
         }
+
+        /* Colombian flag accent across the top: yellow / blue / red */
+        .flag-bar {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          height: 8px;
+          display: flex;
+        }
+        .flag-bar span { display: block; }
+        .flag-bar span:nth-child(1) { flex: 2; background: #fcd116; }
+        .flag-bar span:nth-child(2) { flex: 1; background: #003893; }
+        .flag-bar span:nth-child(3) { flex: 1; background: #ce1126; }
+
+        .btn-primary-co {
+          background: #fcd116;
+          color: #1a1a1a;
+        }
+        .btn-primary-co:hover { background: #ffe14d; }
+
+        .btn-outline-co {
+          background: transparent;
+          color: #003893;
+          border: 2px solid #003893;
+        }
+        .btn-outline-co:hover { background: #003893; color: #fff; }
 
         @keyframes bubbleIn {
           0% {

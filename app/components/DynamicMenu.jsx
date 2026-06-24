@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Reveal, OrderButton } from "./index";
 import { SITE } from "../site.config";
+import { listMenuItems, subscribeToMenu } from "@/lib/menuStore";
 
 export function DynamicMenu() {
   const [menuGroups, setMenuGroups] = useState([]);
@@ -10,31 +11,24 @@ export function DynamicMenu() {
 
   useEffect(() => {
     fetchMenuItems();
+    // Live updates: when admin changes the menu, the public page reflects it instantly
+    const unsubscribe = subscribeToMenu(() => fetchMenuItems());
+    return unsubscribe;
   }, []);
 
   const fetchMenuItems = async () => {
     try {
-      setLoading(true);
-      const res = await fetch("/api/admin/menu-items");
-      if (!res.ok) throw new Error("Failed to fetch menu");
+      const items = await listMenuItems();
 
-      const data = await res.json();
-      const items = data.items || [];
-
-      // Group items by category
+      // Group items by category, preserving first-seen order
       const grouped = {};
-      items.forEach(item => {
-        const category = item.category || "OTROS";
+      items.forEach((item) => {
+        const category = item.category || "Otros";
         if (!grouped[category]) grouped[category] = [];
         grouped[category].push(item);
       });
 
-      // Convert to array format matching original structure
-      const groupedArray = Object.entries(grouped).map(([group, items]) => ({
-        group,
-        items
-      }));
-
+      const groupedArray = Object.entries(grouped).map(([group, items]) => ({ group, items }));
       setMenuGroups(groupedArray);
       setError(null);
     } catch (err) {
@@ -48,7 +42,7 @@ export function DynamicMenu() {
   if (loading) {
     return (
       <div style={{ padding: "2rem", textAlign: "center" }}>
-        <p>Loading menu...</p>
+        <p>Cargando el menú...</p>
       </div>
     );
   }
@@ -56,7 +50,7 @@ export function DynamicMenu() {
   if (error) {
     return (
       <div style={{ padding: "2rem", textAlign: "center", color: "red" }}>
-        <p>Error loading menu: {error}</p>
+        <p>Error al cargar el menú: {error}</p>
       </div>
     );
   }
@@ -64,7 +58,7 @@ export function DynamicMenu() {
   if (menuGroups.length === 0) {
     return (
       <div style={{ padding: "2rem", textAlign: "center" }}>
-        <p>No menu items available</p>
+        <p>No hay platos disponibles por ahora</p>
       </div>
     );
   }
@@ -106,7 +100,7 @@ export function DynamicMenu() {
             className="btn btn-small"
             style={{ marginLeft: "auto" }}
           >
-            🔄 Refresh Menu
+            🔄 Actualizar menú
           </button>
         </div>
       </Reveal>

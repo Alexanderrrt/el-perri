@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { listUsers, deleteUserById } from "@/lib/userStore";
+import { listMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, subscribeToMenu } from "@/lib/menuStore";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
@@ -11,7 +12,7 @@ export default function AdminDashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [menuForm, setMenuForm] = useState({ name: "", category: "", price: "", description: "" });
+  const [menuForm, setMenuForm] = useState({ name: "", category: "", price: "", description: "", tag: "" });
 
   const [orders, setOrders] = useState([]);
   const [customers, setCustomers] = useState([]);
@@ -42,10 +43,11 @@ export default function AdminDashboard() {
     if (authData) setAdmin(JSON.parse(authData));
     loadAllData();
     refreshUsers();
+    refreshMenu();
 
-    // Real-time: when a guest signs up on ANY device, update the table live
+    // Real-time: changes on ANY device update these tables live
     if (isSupabaseConfigured) {
-      const channel = supabase
+      const usersChannel = supabase
         .channel("registered_users_changes")
         .on(
           "postgres_changes",
@@ -53,20 +55,22 @@ export default function AdminDashboard() {
           () => refreshUsers()
         )
         .subscribe();
-      return () => supabase.removeChannel(channel);
+      const unsubMenu = subscribeToMenu(() => refreshMenu());
+      return () => {
+        supabase.removeChannel(usersChannel);
+        unsubMenu();
+      };
     }
   }, []);
 
   const loadAllData = () => {
     if (typeof window === "undefined") return;
-    const items = localStorage.getItem("menuItems");
     const ordr = localStorage.getItem("orders");
     const cust = localStorage.getItem("customers");
     const inv = localStorage.getItem("inventory");
     const stf = localStorage.getItem("staff");
     const promo = localStorage.getItem("promotions");
 
-    if (items) setMenuItems(JSON.parse(items));
     if (ordr) setOrders(JSON.parse(ordr));
     if (cust) setCustomers(JSON.parse(cust));
     if (inv) setInventory(JSON.parse(inv));
@@ -74,34 +78,43 @@ export default function AdminDashboard() {
     if (promo) setPromotions(JSON.parse(promo));
   };
 
+  const refreshMenu = async () => {
+    try {
+      setMenuItems(await listMenuItems());
+    } catch (err) {
+      notify("No se pudo cargar el menú: " + err.message, "error");
+    }
+  };
+
   const refreshUsers = async () => {
     try {
       setUsers(await listUsers());
     } catch (err) {
-      notify("Could not load users: " + err.message, "error");
+      notify("No se pudieron cargar los usuarios: " + err.message, "error");
     }
   };
 
   const deleteUser = async (userId) => {
+    if (typeof window !== "undefined" && !window.confirm("¿Eliminar este usuario?")) return;
     try {
       await deleteUserById(userId);
       await refreshUsers();
-      notify("User deleted", "success");
+      notify("Usuario eliminado", "success");
     } catch (err) {
-      notify("Delete failed: " + err.message, "error");
+      notify("No se pudo eliminar: " + err.message, "error");
     }
   };
 
   const exportUsersCSV = () => {
     if (users.length === 0) {
-      notify("No users to export", "error");
+      notify("No hay usuarios para exportar", "error");
       return;
     }
-    const headers = ["Email", "Name", "Newsletter", "Signed Up"];
+    const headers = ["Correo", "Nombre", "Newsletter", "Registrado"];
     const rows = users.map(u => [
       u.email,
       u.name || "N/A",
-      u.newsletter ? "Yes" : "No",
+      u.newsletter ? "Sí" : "No",
       u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"
     ]);
     const csv = [headers, ...rows]
@@ -117,19 +130,19 @@ export default function AdminDashboard() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    notify(`Exported ${users.length} users for marketing`, "success");
+    notify(`Se exportaron ${users.length} usuarios para marketing`, "success");
   };
 
   const exportEmailsOnly = () => {
     if (users.length === 0) {
-      notify("No users to export", "error");
+      notify("No hay usuarios para exportar", "error");
       return;
     }
     const emails = users.map(u => u.email).join(", ");
     navigator.clipboard.writeText(emails).then(() => {
-      notify(`Copied ${users.length} emails to clipboard`, "success");
+      notify(`Se copiaron ${users.length} correos al portapapeles`, "success");
     }).catch(() => {
-      notify("Could not copy to clipboard", "error");
+      notify("No se pudo copiar al portapapeles", "error");
     });
   };
 
@@ -138,38 +151,56 @@ export default function AdminDashboard() {
     setTimeout(() => setNotification(null), 3000);
   };
 
-  const saveMenu = (items) => {
-    if (typeof window !== "undefined") localStorage.setItem("menuItems", JSON.stringify(items));
-    setMenuItems(items);
-  };
-
-  const handleAddMenu = () => {
+  const handleAddMenu = async () => {
     if (!menuForm.name || !menuForm.price) {
-      notify("Name and price are required", "error");
+      notify("El nombre y el precio son obligatorios", "error");
       return;
     }
-    if (editingId) {
-      const updated = menuItems.map(m => m.id === editingId ? { ...menuForm, id: editingId } : m);
-      saveMenu(updated);
-      notify("Menu item updated successfully", "success");
-      setEditingId(null);
-    } else {
-      saveMenu([...menuItems, { ...menuForm, id: Date.now() }]);
-      notify("Menu item added successfully", "success");
+    try {
+      if (editingId) {
+        await updateMenuItem(editingId, menuForm);
+        notify(`✓ "${menuForm.name}" actualizado`, "success");
+        setEditingId(null);
+      } else {
+        await addMenuItem(menuForm);
+        notify(`✓ "${menuForm.name}" agregado al menú`, "success");
+      }
+      await refreshMenu();
+      setMenuForm({ name: "", category: "", price: "", description: "", tag: "" });
+      setShowAddMenu(false);
+    } catch (err) {
+      notify("No se pudo guardar: " + err.message, "error");
     }
-    setMenuForm({ name: "", category: "", price: "", description: "" });
-    setShowAddMenu(false);
   };
 
-  const deleteMenu = (id) => {
-    saveMenu(menuItems.filter(m => m.id !== id));
-    notify("Menu item deleted", "success");
+  const deleteMenu = async (id, name) => {
+    if (typeof window !== "undefined" && !window.confirm(`¿Eliminar "${name}" del menú?`)) return;
+    try {
+      await deleteMenuItem(id);
+      await refreshMenu();
+      notify(`"${name}" eliminado`, "success");
+    } catch (err) {
+      notify("No se pudo eliminar: " + err.message, "error");
+    }
   };
+
   const editMenu = (item) => {
-    setMenuForm(item);
+    setMenuForm({
+      name: item.name || "",
+      category: item.category || "",
+      price: item.price || "",
+      description: item.description || "",
+      tag: item.tag || "",
+    });
     setEditingId(item.id);
     setShowAddMenu(true);
-    notify("Editing menu item", "info");
+    notify("Editando plato — guarda los cambios abajo", "info");
+  };
+
+  const priceLabel = (p) => {
+    const s = String(p ?? "").trim();
+    if (!s) return "";
+    return /^[0-9.]+$/.test(s) ? `$${s}` : s;
   };
 
   const saveInventory = (items) => {
@@ -179,15 +210,16 @@ export default function AdminDashboard() {
 
   const handleAddInventory = () => {
     if (!inventoryForm.name || !inventoryForm.quantity) {
-      alert("Name and quantity required");
+      notify("El nombre y la cantidad son obligatorios", "error");
       return;
     }
     saveInventory([...inventory, { ...inventoryForm, id: Date.now() }]);
     setInventoryForm({ name: "", quantity: "", unit: "", minStock: "" });
     setShowAddInventory(false);
+    notify("Insumo agregado", "success");
   };
 
-  const deleteInventory = (id) => saveInventory(inventory.filter(i => i.id !== id));
+  const deleteInventory = (id) => { saveInventory(inventory.filter(i => i.id !== id)); notify("Insumo eliminado", "success"); };
 
   const saveStaff = (items) => {
     if (typeof window !== "undefined") localStorage.setItem("staff", JSON.stringify(items));
@@ -196,15 +228,16 @@ export default function AdminDashboard() {
 
   const handleAddStaff = () => {
     if (!staffForm.name || !staffForm.email) {
-      alert("Name and email required");
+      notify("El nombre y el correo son obligatorios", "error");
       return;
     }
     saveStaff([...staff, { ...staffForm, id: Date.now() }]);
     setStaffForm({ name: "", email: "", role: "", phone: "" });
     setShowAddStaff(false);
+    notify("Empleado agregado", "success");
   };
 
-  const deleteStaff = (id) => saveStaff(staff.filter(s => s.id !== id));
+  const deleteStaff = (id) => { saveStaff(staff.filter(s => s.id !== id)); notify("Empleado eliminado", "success"); };
 
   const savePromo = (items) => {
     if (typeof window !== "undefined") localStorage.setItem("promotions", JSON.stringify(items));
@@ -213,15 +246,16 @@ export default function AdminDashboard() {
 
   const handleAddPromo = () => {
     if (!promoForm.code || !promoForm.discount) {
-      alert("Code and discount required");
+      notify("El código y el descuento son obligatorios", "error");
       return;
     }
     savePromo([...promotions, { ...promoForm, id: Date.now() }]);
     setPromoForm({ code: "", discount: "", type: "percent", expiry: "" });
     setShowAddPromo(false);
+    notify("Promoción creada", "success");
   };
 
-  const deletePromo = (id) => savePromo(promotions.filter(p => p.id !== id));
+  const deletePromo = (id) => { savePromo(promotions.filter(p => p.id !== id)); notify("Promoción eliminada", "success"); };
 
   const handleOrderStatus = (id, status) => {
     const updated = orders.map(o => o.id === id ? { ...o, status } : o);
@@ -240,60 +274,62 @@ export default function AdminDashboard() {
         </div>
       )}
       <nav className="admin-nav">
-        <div className="admin-nav-brand"><h1>El Perri Admin</h1></div>
+        <div className="admin-nav-brand"><h1>El Perri · Panel</h1></div>
         <button className="btn-logout" onClick={() => {
           if (typeof window !== "undefined") {
             sessionStorage.removeItem("adminAuth");
             window.location.href = "/admin/login";
           }
-        }}>Logout</button>
+        }}>Cerrar sesión</button>
       </nav>
 
       <div className="admin-tabs">
-        <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menu</button>
-        <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Orders</button>
-        <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Analytics</button>
-        <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Customers</button>
-        <button className={`tab-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")}>📧 Users & Marketing</button>
-        <button className={`tab-btn ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}>📦 Inventory</button>
-        <button className={`tab-btn ${activeTab === "staff" ? "active" : ""}`} onClick={() => setActiveTab("staff")}>👔 Staff</button>
-        <button className={`tab-btn ${activeTab === "promotions" ? "active" : ""}`} onClick={() => setActiveTab("promotions")}>🎁 Promotions</button>
-        <button className={`tab-btn ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>⚙️ Settings</button>
+        <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
+        <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Pedidos</button>
+        <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Estadísticas</button>
+        <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Clientes</button>
+        <button className={`tab-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")}>📧 Usuarios y Marketing</button>
+        <button className={`tab-btn ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}>📦 Inventario</button>
+        <button className={`tab-btn ${activeTab === "staff" ? "active" : ""}`} onClick={() => setActiveTab("staff")}>👔 Personal</button>
+        <button className={`tab-btn ${activeTab === "promotions" ? "active" : ""}`} onClick={() => setActiveTab("promotions")}>🎁 Promociones</button>
+        <button className={`tab-btn ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>⚙️ Ajustes</button>
       </div>
 
       <main className="admin-main">
         {activeTab === "menu" && (
           <div>
             <div className="section-header">
-              <h2>Menu Management</h2>
+              <h2>Gestión del Menú {isSupabaseConfigured && <span className="live-badge">● EN VIVO</span>}</h2>
               <button className="btn btn-gold" onClick={() => {
                 setShowAddMenu(!showAddMenu);
                 setEditingId(null);
-                setMenuForm({ name: "", category: "", price: "", description: "" });
-              }}>{showAddMenu ? "Cancel" : "+ Add Item"}</button>
+                setMenuForm({ name: "", category: "", price: "", description: "", tag: "" });
+              }}>{showAddMenu ? "Cancelar" : "+ Agregar plato"}</button>
             </div>
+            <p className="hint-text">Los cambios se guardan en la base de datos y aparecen al instante en el menú del sitio web.</p>
             {showAddMenu && (
               <div className="form-section">
-                <input placeholder="Item name" value={menuForm.name} onChange={(e) => setMenuForm({...menuForm, name: e.target.value})} />
-                <input placeholder="Category" value={menuForm.category} onChange={(e) => setMenuForm({...menuForm, category: e.target.value})} />
-                <input placeholder="Price" type="number" step="0.01" value={menuForm.price} onChange={(e) => setMenuForm({...menuForm, price: e.target.value})} />
-                <textarea placeholder="Description" value={menuForm.description} onChange={(e) => setMenuForm({...menuForm, description: e.target.value})}></textarea>
-                <button className="btn btn-gold" onClick={handleAddMenu}>{editingId ? "Update" : "Add"} Item</button>
+                <input placeholder="Nombre del plato" value={menuForm.name} onChange={(e) => setMenuForm({...menuForm, name: e.target.value})} />
+                <input placeholder="Categoría (ej. Hamburguesas, Patacones)" value={menuForm.category} onChange={(e) => setMenuForm({...menuForm, category: e.target.value})} />
+                <input placeholder="Precio (ej. $15)" value={menuForm.price} onChange={(e) => setMenuForm({...menuForm, price: e.target.value})} />
+                <input placeholder="Etiqueta (opcional: Favorita, Nuevo...)" value={menuForm.tag} onChange={(e) => setMenuForm({...menuForm, tag: e.target.value})} />
+                <textarea placeholder="Descripción" value={menuForm.description} onChange={(e) => setMenuForm({...menuForm, description: e.target.value})}></textarea>
+                <button className="btn btn-gold" onClick={handleAddMenu}>{editingId ? "Guardar cambios" : "Agregar plato"}</button>
               </div>
             )}
             <div className="items-grid">
               {menuItems.length === 0 ? (
-                <p className="empty-state">No menu items yet</p>
+                <p className="empty-state">Aún no hay platos en el menú</p>
               ) : (
                 menuItems.map(item => (
                   <div key={item.id} className="item-card">
                     <strong>{item.name}</strong>
-                    <p className="category">{item.category}</p>
-                    <p className="price">${parseFloat(item.price).toFixed(2)}</p>
+                    <p className="category">{item.category}{item.tag ? ` · ${item.tag}` : ""}</p>
+                    <p className="price">{priceLabel(item.price)}</p>
                     <p className="desc">{item.description}</p>
                     <div className="actions">
-                      <button className="btn btn-small" onClick={() => editMenu(item)}>Edit</button>
-                      <button className="btn btn-small btn-danger" onClick={() => deleteMenu(item.id)}>Delete</button>
+                      <button className="btn btn-small" onClick={() => editMenu(item)}>Editar</button>
+                      <button className="btn btn-small btn-danger" onClick={() => deleteMenu(item.id, item.name)}>Eliminar</button>
                     </div>
                   </div>
                 ))
@@ -304,20 +340,20 @@ export default function AdminDashboard() {
 
         {activeTab === "orders" && (
           <div>
-            <h2>Order Management</h2>
+            <h2>Gestión de Pedidos</h2>
             {orders.length === 0 ? (
-              <p className="empty-state">No orders yet</p>
+              <p className="empty-state">Aún no hay pedidos</p>
             ) : (
               <div className="cards-grid">
                 {orders.map(order => (
                   <div key={order.id} className="card">
-                    <strong>Order #{order.id}</strong>
+                    <strong>Pedido #{order.id}</strong>
                     <p>{order.customer} • ${order.total}</p>
                     <select value={order.status} onChange={(e) => handleOrderStatus(order.id, e.target.value)}>
-                      <option>pending</option>
-                      <option>preparing</option>
-                      <option>ready</option>
-                      <option>completed</option>
+                      <option value="pending">Pendiente</option>
+                      <option value="preparing">En preparación</option>
+                      <option value="ready">Listo</option>
+                      <option value="completed">Entregado</option>
                     </select>
                   </div>
                 ))}
@@ -328,26 +364,26 @@ export default function AdminDashboard() {
 
         {activeTab === "analytics" && (
           <div>
-            <h2>Analytics & Reports</h2>
+            <h2>Estadísticas y Reportes</h2>
             <div className="stats-grid">
-              <div className="stat"><h3>Total Orders</h3><p className="value">{orders.length}</p></div>
-              <div className="stat"><h3>Revenue</h3><p className="value">${totalRevenue.toFixed(2)}</p></div>
-              <div className="stat"><h3>Menu Items</h3><p className="value">{menuItems.length}</p></div>
-              <div className="stat"><h3>Staff</h3><p className="value">{staff.length}</p></div>
+              <div className="stat"><h3>Pedidos totales</h3><p className="value">{orders.length}</p></div>
+              <div className="stat"><h3>Ingresos</h3><p className="value">${totalRevenue.toFixed(2)}</p></div>
+              <div className="stat"><h3>Platos en el menú</h3><p className="value">{menuItems.length}</p></div>
+              <div className="stat"><h3>Personal</h3><p className="value">{staff.length}</p></div>
             </div>
-            {lowStockItems.length > 0 && <div className="alert alert-warning">⚠️ {lowStockItems.length} items low on stock</div>}
+            {lowStockItems.length > 0 && <div className="alert alert-warning">⚠️ {lowStockItems.length} insumos con poco stock</div>}
           </div>
         )}
 
         {activeTab === "customers" && (
           <div>
-            <h2>Customer Management</h2>
+            <h2>Gestión de Clientes</h2>
             {customers.length === 0 ? (
-              <p className="empty-state">No customers yet</p>
+              <p className="empty-state">Aún no hay clientes</p>
             ) : (
               <div className="cards-grid">
                 {customers.map(cust => (
-                  <div key={cust.id} className="card"><strong>{cust.name}</strong><p>{cust.email}</p><p className="small">Orders: {cust.orders}</p></div>
+                  <div key={cust.id} className="card"><strong>{cust.name}</strong><p>{cust.email}</p><p className="small">Pedidos: {cust.orders}</p></div>
                 ))}
               </div>
             )}
@@ -357,36 +393,36 @@ export default function AdminDashboard() {
         {activeTab === "users" && (
           <div>
             <div className="section-header">
-              <h2>Users & Marketing {isSupabaseConfigured && <span className="live-badge">● LIVE</span>}</h2>
+              <h2>Usuarios y Marketing {isSupabaseConfigured && <span className="live-badge">● EN VIVO</span>}</h2>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="btn btn-small" onClick={refreshUsers}>🔄 Refresh</button>
-                <button className="btn btn-small" onClick={exportEmailsOnly}>📋 Copy Emails</button>
-                <button className="btn btn-gold" onClick={exportUsersCSV}>⬇ Export CSV</button>
+                <button className="btn btn-small" onClick={refreshUsers}>🔄 Actualizar</button>
+                <button className="btn btn-small" onClick={exportEmailsOnly}>📋 Copiar correos</button>
+                <button className="btn btn-gold" onClick={exportUsersCSV}>⬇ Exportar CSV</button>
               </div>
             </div>
 
             <div className="stats-grid" style={{ marginBottom: "2rem" }}>
-              <div className="stat"><h3>Total Users</h3><p className="value">{users.length}</p></div>
-              <div className="stat"><h3>Newsletter Opt-In</h3><p className="value">{users.filter(u => u.newsletter).length}</p></div>
-              <div className="stat"><h3>This Week</h3><p className="value">{users.filter(u => u.createdAt && (Date.now() - new Date(u.createdAt).getTime()) < 7 * 864e5).length}</p></div>
+              <div className="stat"><h3>Usuarios totales</h3><p className="value">{users.length}</p></div>
+              <div className="stat"><h3>Suscritos al newsletter</h3><p className="value">{users.filter(u => u.newsletter).length}</p></div>
+              <div className="stat"><h3>Esta semana</h3><p className="value">{users.filter(u => u.createdAt && (Date.now() - new Date(u.createdAt).getTime()) < 7 * 864e5).length}</p></div>
             </div>
 
             <input
-              placeholder="Search by email or name..."
+              placeholder="Buscar por correo o nombre..."
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
               style={{ width: "100%", maxWidth: "400px", marginBottom: "1.5rem", background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.2)", color: "#fff", padding: "0.75rem", borderRadius: "4px" }}
             />
 
             {users.length === 0 ? (
-              <p className="empty-state">No registered users yet. When guests sign up via the welcome bubble, they appear here.</p>
+              <p className="empty-state">Aún no hay usuarios registrados. Cuando alguien se registre en la burbuja de bienvenida, aparecerá aquí.</p>
             ) : (
               <div className="user-table">
                 <div className="user-row user-head">
-                  <span>Name</span>
-                  <span>Email</span>
+                  <span>Nombre</span>
+                  <span>Correo</span>
                   <span>Newsletter</span>
-                  <span>Joined</span>
+                  <span>Registro</span>
                   <span></span>
                 </div>
                 {users
@@ -399,9 +435,9 @@ export default function AdminDashboard() {
                     <div key={user.userId} className="user-row">
                       <span><strong>{user.name}</strong></span>
                       <span>{user.email}</span>
-                      <span>{user.newsletter ? "✅ Yes" : "—"}</span>
+                      <span>{user.newsletter ? "✅ Sí" : "—"}</span>
                       <span className="small">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}</span>
-                      <span><button className="btn btn-small btn-danger" onClick={() => deleteUser(user.userId)}>Delete</button></span>
+                      <span><button className="btn btn-small btn-danger" onClick={() => deleteUser(user.userId)}>Eliminar</button></span>
                     </div>
                   ))}
               </div>
@@ -412,28 +448,28 @@ export default function AdminDashboard() {
         {activeTab === "inventory" && (
           <div>
             <div className="section-header">
-              <h2>Inventory Management</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddInventory(!showAddInventory)}>{showAddInventory ? "Cancel" : "+ Add Item"}</button>
+              <h2>Gestión de Inventario</h2>
+              <button className="btn btn-gold" onClick={() => setShowAddInventory(!showAddInventory)}>{showAddInventory ? "Cancelar" : "+ Agregar insumo"}</button>
             </div>
             {showAddInventory && (
               <div className="form-section">
-                <input placeholder="Item name" value={inventoryForm.name} onChange={(e) => setInventoryForm({...inventoryForm, name: e.target.value})} />
-                <input placeholder="Quantity" type="number" value={inventoryForm.quantity} onChange={(e) => setInventoryForm({...inventoryForm, quantity: e.target.value})} />
-                <input placeholder="Unit (kg, L, pcs)" value={inventoryForm.unit} onChange={(e) => setInventoryForm({...inventoryForm, unit: e.target.value})} />
-                <input placeholder="Min Stock Alert" type="number" value={inventoryForm.minStock} onChange={(e) => setInventoryForm({...inventoryForm, minStock: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddInventory}>Add Item</button>
+                <input placeholder="Nombre del insumo" value={inventoryForm.name} onChange={(e) => setInventoryForm({...inventoryForm, name: e.target.value})} />
+                <input placeholder="Cantidad" type="number" value={inventoryForm.quantity} onChange={(e) => setInventoryForm({...inventoryForm, quantity: e.target.value})} />
+                <input placeholder="Unidad (kg, L, unid.)" value={inventoryForm.unit} onChange={(e) => setInventoryForm({...inventoryForm, unit: e.target.value})} />
+                <input placeholder="Alerta de stock mínimo" type="number" value={inventoryForm.minStock} onChange={(e) => setInventoryForm({...inventoryForm, minStock: e.target.value})} />
+                <button className="btn btn-gold" onClick={handleAddInventory}>Agregar insumo</button>
               </div>
             )}
             <div className="cards-grid">
               {inventory.length === 0 ? (
-                <p className="empty-state">No inventory items</p>
+                <p className="empty-state">No hay insumos en el inventario</p>
               ) : (
                 inventory.map(item => (
                   <div key={item.id} className={`card ${parseInt(item.quantity) <= parseInt(item.minStock || 0) ? "low-stock" : ""}`}>
                     <strong>{item.name}</strong>
                     <p>{item.quantity} {item.unit}</p>
-                    <p className="small">Min: {item.minStock}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deleteInventory(item.id)}>Delete</button>
+                    <p className="small">Mín: {item.minStock}</p>
+                    <button className="btn btn-small btn-danger" onClick={() => deleteInventory(item.id)}>Eliminar</button>
                   </div>
                 ))
               )}
@@ -444,21 +480,21 @@ export default function AdminDashboard() {
         {activeTab === "staff" && (
           <div>
             <div className="section-header">
-              <h2>Staff Management</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddStaff(!showAddStaff)}>{showAddStaff ? "Cancel" : "+ Add Staff"}</button>
+              <h2>Gestión de Personal</h2>
+              <button className="btn btn-gold" onClick={() => setShowAddStaff(!showAddStaff)}>{showAddStaff ? "Cancelar" : "+ Agregar empleado"}</button>
             </div>
             {showAddStaff && (
               <div className="form-section">
-                <input placeholder="Full name" value={staffForm.name} onChange={(e) => setStaffForm({...staffForm, name: e.target.value})} />
-                <input placeholder="Email" type="email" value={staffForm.email} onChange={(e) => setStaffForm({...staffForm, email: e.target.value})} />
-                <input placeholder="Role (Manager, Chef, Waiter)" value={staffForm.role} onChange={(e) => setStaffForm({...staffForm, role: e.target.value})} />
-                <input placeholder="Phone" value={staffForm.phone} onChange={(e) => setStaffForm({...staffForm, phone: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddStaff}>Add Staff</button>
+                <input placeholder="Nombre completo" value={staffForm.name} onChange={(e) => setStaffForm({...staffForm, name: e.target.value})} />
+                <input placeholder="Correo" type="email" value={staffForm.email} onChange={(e) => setStaffForm({...staffForm, email: e.target.value})} />
+                <input placeholder="Cargo (Gerente, Chef, Mesero)" value={staffForm.role} onChange={(e) => setStaffForm({...staffForm, role: e.target.value})} />
+                <input placeholder="Teléfono" value={staffForm.phone} onChange={(e) => setStaffForm({...staffForm, phone: e.target.value})} />
+                <button className="btn btn-gold" onClick={handleAddStaff}>Agregar empleado</button>
               </div>
             )}
             <div className="cards-grid">
               {staff.length === 0 ? (
-                <p className="empty-state">No staff members</p>
+                <p className="empty-state">No hay empleados registrados</p>
               ) : (
                 staff.map(member => (
                   <div key={member.id} className="card">
@@ -466,7 +502,7 @@ export default function AdminDashboard() {
                     <p className="role">{member.role}</p>
                     <p className="small">{member.email}</p>
                     <p className="small">{member.phone}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deleteStaff(member.id)}>Delete</button>
+                    <button className="btn btn-small btn-danger" onClick={() => deleteStaff(member.id)}>Eliminar</button>
                   </div>
                 ))
               )}
@@ -477,31 +513,31 @@ export default function AdminDashboard() {
         {activeTab === "promotions" && (
           <div>
             <div className="section-header">
-              <h2>Promotions & Discounts</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddPromo(!showAddPromo)}>{showAddPromo ? "Cancel" : "+ Add Promo"}</button>
+              <h2>Promociones y Descuentos</h2>
+              <button className="btn btn-gold" onClick={() => setShowAddPromo(!showAddPromo)}>{showAddPromo ? "Cancelar" : "+ Agregar promoción"}</button>
             </div>
             {showAddPromo && (
               <div className="form-section">
-                <input placeholder="Code (SUMMER20)" value={promoForm.code} onChange={(e) => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})} />
-                <input placeholder="Discount" type="number" step="0.01" value={promoForm.discount} onChange={(e) => setPromoForm({...promoForm, discount: e.target.value})} />
+                <input placeholder="Código (VERANO20)" value={promoForm.code} onChange={(e) => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})} />
+                <input placeholder="Descuento" type="number" step="0.01" value={promoForm.discount} onChange={(e) => setPromoForm({...promoForm, discount: e.target.value})} />
                 <select value={promoForm.type} onChange={(e) => setPromoForm({...promoForm, type: e.target.value})}>
-                  <option value="percent">Percent (%)</option>
-                  <option value="fixed">Fixed ($)</option>
+                  <option value="percent">Porcentaje (%)</option>
+                  <option value="fixed">Monto fijo ($)</option>
                 </select>
-                <input placeholder="Expiry date" type="date" value={promoForm.expiry} onChange={(e) => setPromoForm({...promoForm, expiry: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddPromo}>Add Promo</button>
+                <input placeholder="Fecha de vencimiento" type="date" value={promoForm.expiry} onChange={(e) => setPromoForm({...promoForm, expiry: e.target.value})} />
+                <button className="btn btn-gold" onClick={handleAddPromo}>Agregar promoción</button>
               </div>
             )}
             <div className="cards-grid">
               {promotions.length === 0 ? (
-                <p className="empty-state">No promotions</p>
+                <p className="empty-state">No hay promociones</p>
               ) : (
                 promotions.map(promo => (
                   <div key={promo.id} className="card">
                     <strong>{promo.code}</strong>
-                    <p className="discount">{promo.discount}{promo.type === "percent" ? "%" : "$"} off</p>
-                    <p className="small">Expires: {promo.expiry}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deletePromo(promo.id)}>Delete</button>
+                    <p className="discount">{promo.discount}{promo.type === "percent" ? "%" : "$"} de descuento</p>
+                    <p className="small">Vence: {promo.expiry}</p>
+                    <button className="btn btn-small btn-danger" onClick={() => deletePromo(promo.id)}>Eliminar</button>
                   </div>
                 ))
               )}
@@ -511,28 +547,28 @@ export default function AdminDashboard() {
 
         {activeTab === "settings" && (
           <div>
-            <h2>Restaurant Settings</h2>
+            <h2>Ajustes del Restaurante</h2>
             <div className="settings-form">
               <div className="form-group">
-                <label>Restaurant Name</label>
+                <label>Nombre del restaurante</label>
                 <input value={settings.name} onChange={(e) => setSettings({...settings, name: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>Phone</label>
+                <label>Teléfono</label>
                 <input value={settings.phone} onChange={(e) => setSettings({...settings, phone: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>Address</label>
+                <label>Dirección</label>
                 <input value={settings.address} onChange={(e) => setSettings({...settings, address: e.target.value})} />
               </div>
               <div className="form-group">
-                <label>Hours</label>
+                <label>Horario</label>
                 <input value={settings.hours} onChange={(e) => setSettings({...settings, hours: e.target.value})} />
               </div>
               <button className="btn btn-gold" onClick={() => {
                 if (typeof window !== "undefined") localStorage.setItem("settings", JSON.stringify(settings));
-                alert("Settings saved!");
-              }}>Save Changes</button>
+                notify("Ajustes guardados", "success");
+              }}>Guardar cambios</button>
             </div>
           </div>
         )}
@@ -618,6 +654,7 @@ export default function AdminDashboard() {
         .user-head { background: #1a1a1a; font-weight: 600; color: rgba(255,215,0,0.7); text-transform: uppercase; font-size: 0.8rem; }
         .user-head span { color: rgba(255,215,0,0.7); }
         .live-badge { font-size: 0.7rem; color: #4caf50; vertical-align: middle; margin-left: 0.5rem; animation: pulse 2s infinite; }
+        .hint-text { color: rgba(255,255,255,0.55); font-size: 0.85rem; margin: -1rem 0 1.5rem 0; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
       `}</style>
     </div>
