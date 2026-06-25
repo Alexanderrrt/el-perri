@@ -1,306 +1,96 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 /**
- * AdminLoginForm — Secure admin portal login.
- * Two-factor authentication (2FA) required.
- * Trust device option (30-day cookie).
- *
- * Handles admin authentication and session management.
+ * AdminLoginForm — simple admin access: username + 4-digit PIN (no 2FA).
+ * On success, stores the session in sessionStorage and goes to the dashboard.
  */
-export function AdminLoginForm({ onSubmit, isLoading }) {
-  const [step, setStep] = useState("credentials"); // 'credentials' | '2fa'
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-    twoFaCode: "",
-    trustDevice: false,
-  });
-  const [sessionToken, setSessionToken] = useState(null);
-  const [csrfToken, setCsrfToken] = useState(null);
-  const [qrCode, setQrCode] = useState(null);
-  const [twoFaSecret, setTwoFaSecret] = useState(null);
+export function AdminLoginForm({ onSubmit }) {
+  const [username, setUsername] = useState("");
+  const [pin, setPin] = useState("");
   const [error, setError] = useState(null);
-  const [deviceTrusted, setDeviceTrusted] = useState(false);
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // Check if this device is already trusted
-    const trustedDevices = localStorage.getItem("trustedAdminDevices");
-    if (trustedDevices) {
-      const devices = JSON.parse(trustedDevices);
-      const deviceId = getDeviceId();
-      const trusted = devices.find(d => d.id === deviceId && new Date(d.expiry) > new Date());
-      if (trusted) {
-        setDeviceTrusted(true);
-        setFormData(prev => ({ ...prev, email: trusted.email }));
-      }
-    }
-  }, []);
-
-  const getDeviceId = () => {
-    let deviceId = localStorage.getItem("deviceId");
-    if (!deviceId) {
-      deviceId = "device-" + Date.now() + "-" + Math.random().toString(36).substr(2, 9);
-      localStorage.setItem("deviceId", deviceId);
-    }
-    return deviceId;
-  };
-
-  const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-    setError(null);
-  };
-
-  const handleLoginSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
-    if (!formData.email || !formData.password) {
-      setError("Email and password are required");
+    if (!username || pin.length !== 4) {
+      setError("Escribe el usuario y un PIN de 4 dígitos");
       return;
     }
 
+    setLoading(true);
     try {
-      // Call backend: POST /api/auth/admin-login
-      const response = await fetch("/api/auth/admin-login", {
+      const res = await fetch("/api/auth/admin-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+        body: JSON.stringify({ username, pin }),
       });
 
-      if (!response.ok) {
-        throw new Error("Invalid email or password");
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Usuario o PIN incorrecto");
       }
 
-      const data = await response.json();
-      setSessionToken(data.sessionToken);
-      setCsrfToken(data.csrfToken);
-      setQrCode(data.qrCode);
-      setTwoFaSecret(data.secret);
-      setStep("2fa");
-    } catch (err) {
-      setError(err.message);
-    }
-  };
+      const data = await res.json();
+      sessionStorage.setItem(
+        "adminAuth",
+        JSON.stringify({ adminName: data.adminName, adminToken: data.adminToken })
+      );
 
-  const handleTwoFaSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
-
-    if (!formData.twoFaCode || formData.twoFaCode.length !== 6) {
-      setError("Please enter a valid 6-digit code");
-      return;
-    }
-
-    try {
-      // Call backend: POST /api/auth/verify-2fa
-      const response = await fetch("/api/auth/verify-2fa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionToken,
-          twoFaCode: formData.twoFaCode,
-          trustDevice: formData.trustDevice,
-          csrfToken,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Invalid 2FA code");
-      }
-
-      const data = await response.json();
-      // Store admin token in session storage
-      sessionStorage.setItem("adminAuth", JSON.stringify({
-        adminName: data.adminName,
-        adminToken: data.adminToken
-      }));
-
-      // If "trust this device" was checked, store device info for 30 days
-      if (formData.trustDevice) {
-        const trustedDevices = JSON.parse(localStorage.getItem("trustedAdminDevices") || "[]");
-        const deviceId = getDeviceId();
-        const expiryDate = new Date();
-        expiryDate.setDate(expiryDate.getDate() + 30);
-
-        // Add or update this device
-        const updatedDevices = trustedDevices.filter(d => d.id !== deviceId);
-        updatedDevices.push({
-          id: deviceId,
-          email: formData.email,
-          expiry: expiryDate.toISOString(),
-          trustedAt: new Date().toISOString()
-        });
-        localStorage.setItem("trustedAdminDevices", JSON.stringify(updatedDevices));
-      }
-
-      // Redirect to dashboard
-      await onSubmit(data);
+      if (onSubmit) await onSubmit(data);
       window.location.href = "/admin/dashboard";
     } catch (err) {
       setError(err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
-  if (step === "2fa") {
-    return (
-      <form onSubmit={handleTwoFaSubmit} className="admin-login-form dark">
-        <div className="form-section">
-          <h2 className="form-title">Two-Factor Authentication</h2>
-          {deviceTrusted ? (
-            <p className="form-subtitle">✅ Welcome back! Enter your 2FA code</p>
-          ) : (
-            <p className="form-subtitle">Set up your authenticator app</p>
-          )}
-        </div>
-
-        {error && <div className="form-error">{error}</div>}
-
-        {qrCode && (
-          <div className="form-group" style={{ textAlign: "center" }}>
-            <p className="form-hint" style={{ marginBottom: "12px", fontSize: "12px" }}>
-              Scan this QR code with Google Authenticator, Authy, or Microsoft Authenticator
-            </p>
-            <img
-              src={qrCode}
-              alt="2FA QR Code"
-              style={{
-                width: "200px",
-                height: "200px",
-                border: "1px solid rgba(255,255,255,.2)",
-                borderRadius: "8px",
-                padding: "8px",
-                backgroundColor: "#fff"
-              }}
-            />
-            <p className="form-hint" style={{ marginTop: "12px", fontSize: "11px", opacity: 0.7 }}>
-              Or enter manually: <code style={{ fontSize: "10px" }}>{twoFaSecret}</code>
-            </p>
-          </div>
-        )}
-
-        <div className="form-group">
-          <label htmlFor="twoFaCode">Authentication Code *</label>
-          <input
-            type="text"
-            id="twoFaCode"
-            name="twoFaCode"
-            placeholder="000000"
-            value={formData.twoFaCode}
-            onChange={handleChange}
-            maxLength="6"
-            pattern="\d{6}"
-            disabled={isLoading}
-            autoFocus
-            style={{ letterSpacing: "4px", fontSize: "16px", textAlign: "center" }}
-          />
-          <p className="form-hint">Enter the 6-digit code from your authenticator app</p>
-        </div>
-
-        <div className="form-group checkbox-group">
-          <label className="checkbox-label">
-            <input
-              type="checkbox"
-              name="trustDevice"
-              checked={formData.trustDevice}
-              onChange={handleChange}
-              disabled={isLoading}
-            />
-            <span>
-              <strong>Trust this device for 30 days</strong>
-              <br />
-              <span className="form-hint" style={{ fontSize: "11px", marginTop: "4px", display: "block" }}>
-                You won't need to enter a code on this device during the next 30 days. Only check on secure devices.
-              </span>
-            </span>
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          className="btn btn-gold btn-large"
-          disabled={isLoading}
-        >
-          {isLoading ? "Verifying..." : "SIGN IN TO DASHBOARD"}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setStep("credentials");
-            setFormData({ ...formData, twoFaCode: "" });
-            setError(null);
-          }}
-          className="btn btn-ghost"
-          disabled={isLoading}
-        >
-          Back to Login
-        </button>
-      </form>
-    );
-  }
-
   return (
-    <form onSubmit={handleLoginSubmit} className="admin-login-form dark">
+    <form onSubmit={handleSubmit} className="admin-login-form dark">
       <div className="form-section">
-        <h2 className="form-title">El Perri Admin</h2>
-        <p className="form-subtitle">Secure Portal</p>
+        <h2 className="form-title">El Perri · Panel</h2>
+        <p className="form-subtitle">Acceso del administrador</p>
       </div>
 
       {error && <div className="form-error">{error}</div>}
 
       <div className="form-group">
-        <label htmlFor="email">Email Address</label>
+        <label htmlFor="username">Usuario</label>
         <input
-          type="email"
-          id="email"
-          name="email"
-          placeholder="admin@elperrilatinfood.com"
-          value={formData.email}
-          onChange={handleChange}
-          required
-          disabled={isLoading}
+          type="text"
+          id="username"
+          name="username"
+          placeholder="admin"
+          value={username}
+          onChange={(e) => { setUsername(e.target.value); setError(null); }}
+          autoFocus
+          disabled={loading}
         />
       </div>
 
       <div className="form-group">
-        <label htmlFor="password">Password</label>
+        <label htmlFor="pin">PIN (4 dígitos)</label>
         <input
           type="password"
-          id="password"
-          name="password"
-          placeholder="••••••••"
-          value={formData.password}
-          onChange={handleChange}
-          required
-          disabled={isLoading}
+          id="pin"
+          name="pin"
+          inputMode="numeric"
+          pattern="\d{4}"
+          maxLength={4}
+          placeholder="••••"
+          value={pin}
+          onChange={(e) => { setPin(e.target.value.replace(/\D/g, "").slice(0, 4)); setError(null); }}
+          disabled={loading}
+          style={{ letterSpacing: "10px", textAlign: "center", fontSize: "22px" }}
         />
       </div>
 
-      <div style={{ textAlign: "right", marginBottom: "1.5rem" }}>
-        <a href="/admin/forgot-password" className="link-accent" style={{ fontSize: "12px" }}>
-          Forgot password?
-        </a>
-      </div>
-
-      <button
-        type="submit"
-        className="btn btn-gold btn-large"
-        disabled={isLoading}
-      >
-        {isLoading ? "Signing in..." : "SIGN IN TO DASHBOARD"}
+      <button type="submit" className="btn btn-gold btn-large" disabled={loading}>
+        {loading ? "Entrando..." : "Entrar"}
       </button>
-
-      <div style={{ fontSize: "12px", color: "rgba(255,255,255,0.6)", marginTop: "1rem" }}>
-        🔒 This login is encrypted and monitored. All activity logged for security audits.
-      </div>
     </form>
   );
 }

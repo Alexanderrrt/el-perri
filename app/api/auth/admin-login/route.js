@@ -1,133 +1,60 @@
 /**
  * POST /api/auth/admin-login
- * Admin authentication — first step (credentials).
- * Returns sessionToken for 2FA verification.
+ * Simple admin auth: username + 4-digit PIN (no 2FA).
  *
- * Body: { email, password }
- * Response: { sessionToken, requiresTwoFa: true, qrCode?: string }
- * Updated: 2026-06-24
+ * Credentials come from env (set these in Vercel), with easy defaults:
+ *   ADMIN_USERNAME (default "admin")
+ *   ADMIN_PIN      (default "1234")
+ *   ADMIN_NAME     (default "El Perri")
+ *
+ * Body: { username, pin }
+ * Response: { ok, adminName, adminToken }
  */
 import crypto from "crypto";
-import QRCode from "qrcode";
-import { verifyPassword } from "@/lib/auth";
-import { generateCSRFToken } from "@/lib/csrf";
 import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors";
 import {
   createAdminLoginLimiter,
   checkAndRespond,
   addRateLimitHeaders,
 } from "@/lib/rateLimit";
-import {
-  AdminLoginSchema,
-  validateRequest,
-  validationErrorResponse,
-} from "@/lib/validation";
 
-// Mock admin users (replace with database query in production)
-// Password: Admin@123
-// Hash generated with: bcryptjs.hash("Admin@123", 10)
-const ADMIN_USERS = [
-  {
-    id: 1,
-    email: "admin@elperrilatinfood.com",
-    passwordHash: "$2a$10$tuaYvi2lyPviQ9R.yeK/HOsAfeSaBlkknPt5WXSYEj06YQF9pINe2", // bcryptjs hash of "Admin@123"
-    name: "Maria Rodriguez",
-    twoFaEnabled: true,
-    twoFaSecret: "MY2VWKSAF4VHKRLXLJIFIYTPKJOVOW3LFZUDSWSHFJXXMUSWIZKQ", // TOTP secret for authenticator
-  },
-];
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+const ADMIN_NAME = process.env.ADMIN_NAME || "El Perri";
 
-/**
- * Handle CORS preflight requests
- */
 export async function OPTIONS(request) {
   return handleCORSPreflight(request.headers.get("origin"));
 }
 
 export async function POST(request) {
+  const origin = request.headers.get("origin");
   try {
-    const origin = request.headers.get("origin");
-
-    // Rate limiting: 5 attempts per 15 minutes
+    // Rate limit to slow down PIN brute-force (5 tries / 15 min)
     const limiter = createAdminLoginLimiter();
-    const rateLimitCheck = checkAndRespond(request, limiter);
-    if (!rateLimitCheck.allowed) {
-      return applyCORSHeaders(rateLimitCheck.response, origin);
-    }
+    const rl = checkAndRespond(request, limiter);
+    if (!rl.allowed) return applyCORSHeaders(rl.response, origin);
 
-    const body = await request.json();
+    const { username, pin } = await request.json();
 
-    // Validation with Zod
-    const validation = validateRequest(AdminLoginSchema, body);
-    if (!validation.valid) {
-      const response = validationErrorResponse(validation.errors);
+    const ok =
+      username &&
+      pin &&
+      String(username).trim().toLowerCase() === ADMIN_USERNAME.toLowerCase() &&
+      String(pin) === String(ADMIN_PIN);
+
+    if (!ok) {
+      const response = Response.json({ error: "Usuario o PIN incorrecto" }, { status: 401 });
       return applyCORSHeaders(response, origin);
     }
 
-    const { email, password } = validation.data;
-
-    // Find admin user
-    const admin = ADMIN_USERS.find((u) => u.email === email);
-    if (!admin) {
-      // Return generic error (don't reveal if email exists)
-      const response = Response.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
-      return applyCORSHeaders(response, origin);
-    }
-
-    // Verify password - development mode with hardcoded check
-    // TODO: Migrate to proper bcryptjs verification once bcryptjs module is working
-    const isPasswordValid = password === "Admin@123";
-    if (!isPasswordValid) {
-      const response = Response.json(
-        { error: "Invalid email or password" },
-        { status: 401 }
-      );
-      return applyCORSHeaders(response, origin);
-    }
-
-    // Generate session token and CSRF token (valid for 10 minutes)
-    const sessionToken = crypto.randomBytes(32).toString("hex");
-    const csrfToken = generateCSRFToken();
-    const sessionExpiry = new Date(Date.now() + 10 * 60 * 1000);
-
-    // Store session in cache/database (TTL: 10 minutes)
-    // In production: Redis.set(`session:${sessionToken}`, { adminId: admin.id, expiry }, EX 600)
-
-    // Log authentication attempt
-    console.log(`[AUTH] Admin login attempt: ${email}`);
-
-    // Generate QR code for first-time 2FA setup
-    let qrCode = null;
-    try {
-      const totpUrl = `otpauth://totp/El%20Perri%20Admin?secret=${admin.twoFaSecret}&issuer=El%20Perri`;
-      qrCode = await QRCode.toDataURL(totpUrl);
-    } catch (err) {
-      console.error("[ERROR] QR code generation failed:", err);
-      // Continue without QR code if generation fails
-    }
-
+    const adminToken = crypto.randomBytes(24).toString("hex");
     const response = Response.json(
-      {
-        sessionToken,
-        csrfToken,
-        requiresTwoFa: admin.twoFaEnabled,
-        qrCode,
-        secret: admin.twoFaSecret,
-        message: "Please set up your authenticator or enter your 2FA code",
-      },
+      { ok: true, adminName: ADMIN_NAME, adminToken },
       { status: 200 }
     );
-    const responseWithCors = applyCORSHeaders(response, origin);
-    return addRateLimitHeaders(responseWithCors, rateLimitCheck.rateLimitInfo);
+    return addRateLimitHeaders(applyCORSHeaders(response, origin), rl.rateLimitInfo);
   } catch (error) {
-    console.error("[ERROR] Admin login failed:", error);
-    const response = Response.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
-    return applyCORSHeaders(response, request.headers.get("origin"));
+    const response = Response.json({ error: "Error del servidor" }, { status: 500 });
+    return applyCORSHeaders(response, origin);
   }
 }
