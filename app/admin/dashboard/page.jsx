@@ -372,14 +372,8 @@ export default function AdminDashboard() {
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
         <button className={`tab-btn ${activeTab === "lunch" ? "active" : ""}`} onClick={() => setActiveTab("lunch")}>🍽️ Almuerzo del día</button>
-        <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Pedidos</button>
         <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Estadísticas</button>
-        <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Clientes</button>
         <button className={`tab-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")}>📧 Usuarios y Marketing</button>
-        <button className={`tab-btn ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}>📦 Inventario</button>
-        <button className={`tab-btn ${activeTab === "staff" ? "active" : ""}`} onClick={() => setActiveTab("staff")}>👔 Personal</button>
-        <button className={`tab-btn ${activeTab === "promotions" ? "active" : ""}`} onClick={() => setActiveTab("promotions")}>🎁 Promociones</button>
-        <button className={`tab-btn ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>⚙️ Ajustes</button>
       </div>
 
       <main className="admin-main">

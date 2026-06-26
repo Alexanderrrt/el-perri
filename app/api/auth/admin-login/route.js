@@ -18,8 +18,8 @@ import {
   addRateLimitHeaders,
 } from "@/lib/rateLimit";
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PIN = process.env.ADMIN_PIN;
 const ADMIN_NAME = process.env.ADMIN_NAME || "El Perri";
 
 export async function OPTIONS(request) {
@@ -33,6 +33,15 @@ export async function POST(request) {
     const limiter = createAdminLoginLimiter();
     const rl = checkAndRespond(request, limiter);
     if (!rl.allowed) return applyCORSHeaders(rl.response, origin);
+
+    // Fail closed: no insecure default credentials.
+    if (!ADMIN_USERNAME || !ADMIN_PIN) {
+      const response = Response.json(
+        { error: "Admin no configurado: define ADMIN_USERNAME y ADMIN_PIN en Vercel." },
+        { status: 503 }
+      );
+      return applyCORSHeaders(response, origin);
+    }
 
     const { username, pin } = await request.json();
 

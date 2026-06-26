@@ -25,7 +25,7 @@ async function handler(request) {
   }
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !key) {
     return Response.json({ error: "Supabase no está configurado" }, { status: 500 });
   }
