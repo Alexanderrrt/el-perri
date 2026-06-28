@@ -10,13 +10,17 @@
  * Body: { username, pin }
  * Response: { ok, adminName, adminToken }
  */
-import crypto from "crypto";
 import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors";
 import {
   createAdminLoginLimiter,
   checkAndRespond,
   addRateLimitHeaders,
 } from "@/lib/rateLimit";
+import {
+  signAdminSession,
+  ADMIN_SESSION_COOKIE,
+  ADMIN_SESSION_TTL_MS,
+} from "@/lib/adminSession";
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "4lex19";
 const ADMIN_PIN = process.env.ADMIN_PIN || "3451";
@@ -47,10 +51,21 @@ export async function POST(request) {
       return applyCORSHeaders(response, origin);
     }
 
-    const adminToken = crypto.randomBytes(24).toString("hex");
+    // Issue a signed, self-expiring session and set it as an HttpOnly cookie.
+    // The cookie — not the returned token — is what the middleware enforces.
+    const exp = Date.now() + ADMIN_SESSION_TTL_MS;
+    const adminToken = await signAdminSession({ u: ADMIN_USERNAME, name: ADMIN_NAME, exp });
+    const maxAge = Math.floor(ADMIN_SESSION_TTL_MS / 1000);
+    const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
+
     const response = Response.json(
       { ok: true, adminName: ADMIN_NAME, adminToken },
-      { status: 200 }
+      {
+        status: 200,
+        headers: {
+          "Set-Cookie": `${ADMIN_SESSION_COOKIE}=${adminToken}; Max-Age=${maxAge}; Path=/; HttpOnly; SameSite=Strict;${secure}`,
+        },
+      }
     );
     return addRateLimitHeaders(applyCORSHeaders(response, origin), rl.rateLimitInfo);
   } catch (error) {

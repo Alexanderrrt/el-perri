@@ -21,37 +21,42 @@ export default function AdminDashboard() {
   const [sendingLunch, setSendingLunch] = useState(false);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    let cancelled = false;
+    let unsubMenu = null;
 
-    // Access gate: only an authenticated admin session may open the dashboard.
-    // Anyone hitting /admin/dashboard without a valid session token issued by
-    // /api/auth/admin-login is bounced to the login page before any data loads.
-    let session = null;
-    try {
-      session = JSON.parse(sessionStorage.getItem("adminAuth") || "null");
-    } catch {
-      session = null;
-    }
+    // Access gate: confirm a valid signed admin session with the server before
+    // loading anything. The Edge middleware already blocks unauthenticated
+    // requests to this route; this is the matching client-side check (and it
+    // covers the HttpOnly cookie, which client JS cannot read directly).
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/admin-verify");
+        if (!res.ok) throw new Error("unauthorized");
+        const data = await res.json();
+        if (cancelled) return;
 
-    if (!session || !session.adminToken) {
-      // replace() so the unguarded dashboard never stays in browser history.
-      window.location.replace("/admin/login");
-      return;
-    }
+        setAdmin({ adminName: data.adminName });
+        setAuthChecked(true);
 
-    setAdmin(session);
-    setAuthChecked(true);
+        refreshMenu();
+        refreshLunch();
 
-    refreshMenu();
-    refreshLunch();
+        // Real-time: menu changes on ANY device update this table live
+        if (isSupabaseConfigured) {
+          unsubMenu = subscribeToMenu(() => refreshMenu());
+        }
+      } catch {
+        // No valid session — bounce to login (replace() leaves no history entry).
+        if (!cancelled && typeof window !== "undefined") {
+          window.location.replace("/admin/login");
+        }
+      }
+    })();
 
-    // Real-time: menu changes on ANY device update this table live
-    if (isSupabaseConfigured) {
-      const unsubMenu = subscribeToMenu(() => refreshMenu());
-      return () => {
-        unsubMenu();
-      };
-    }
+    return () => {
+      cancelled = true;
+      if (unsubMenu) unsubMenu();
+    };
   }, []);
 
   const refreshMenu = async () => {
@@ -225,7 +230,17 @@ export default function AdminDashboard() {
           <h1>El Perri · Panel</h1>
           {admin?.adminName && <span className="admin-nav-who">Sesión: {admin.adminName}</span>}
         </div>
-        <button className="btn-logout" onClick={() => {
+        <button className="btn-logout" onClick={async () => {
+          // Clear the HttpOnly session cookie server-side, then leave.
+          try {
+            await fetch("/api/auth/logout", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: "{}",
+            });
+          } catch {
+            // Ignore network errors — still send the user back to login.
+          }
           if (typeof window !== "undefined") {
             sessionStorage.removeItem("adminAuth");
             window.location.href = "/admin/login";

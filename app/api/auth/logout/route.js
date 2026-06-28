@@ -1,12 +1,14 @@
 /**
  * POST /api/auth/logout
- * Admin logout — clears session and cookies.
+ * Admin logout — expires the signed admin_session cookie.
  *
- * Body: { adminToken }
+ * Body: optional { adminToken } (the cookie is HttpOnly, so the client usually
+ * can't supply it). The session cookie is cleared regardless.
  * Response: { message: "Logged out successfully" }
  */
 import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors";
 import { logAudit } from "@/lib/audit";
+import { ADMIN_SESSION_COOKIE } from "@/lib/adminSession";
 
 /**
  * Handle CORS preflight requests
@@ -18,26 +20,14 @@ export async function OPTIONS(request) {
 export async function POST(request) {
   try {
     const origin = request.headers.get("origin");
-    const { adminToken } = await request.json();
-
-    // Validation
-    if (!adminToken) {
-      const response = Response.json(
-        { error: "Admin token required" },
-        { status: 400 }
-      );
-      return applyCORSHeaders(response, origin);
-    }
-
-    // In production:
-    // - Delete session from Redis: await redis.del(`adminToken:${adminToken}`)
-    // - Delete session from database: DELETE FROM admin_sessions WHERE token = ?
-    // - Add token to blacklist to prevent reuse
+    // Body is optional — logout must always clear the session cookie, even if
+    // the client can't read the (HttpOnly) token to send it.
+    const body = await request.json().catch(() => ({}));
 
     // Log logout event
     await logAudit({
       entityType: "admin_session",
-      entityId: adminToken,
+      entityId: body?.adminToken ? String(body.adminToken).slice(0, 16) : "unknown",
       action: "logout",
       actorType: "admin",
       actorId: "current-admin-id",
@@ -46,9 +36,9 @@ export async function POST(request) {
       newValues: { status: "logged_out" },
     });
 
-    console.log(`[AUTH] Admin logged out: ${adminToken.slice(0, 8)}...`);
+    const secure = process.env.NODE_ENV === "production" ? " Secure;" : "";
 
-    // Create response with cleared cookie
+    // Expire the signed session cookie.
     const response = Response.json(
       {
         message: "Logged out successfully",
@@ -57,8 +47,7 @@ export async function POST(request) {
       {
         status: 200,
         headers: {
-          // Clear the adminToken cookie
-          "Set-Cookie": `adminToken=; Max-Age=0; Path=/; Secure; HttpOnly; SameSite=Strict`,
+          "Set-Cookie": `${ADMIN_SESSION_COOKIE}=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict;${secure}`,
         },
       }
     );
