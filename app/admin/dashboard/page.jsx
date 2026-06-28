@@ -46,7 +46,11 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
-    if (authData) setAdmin(JSON.parse(authData));
+    if (!authData) {
+      window.location.href = "/admin/login";
+      return;
+    }
+    setAdmin(JSON.parse(authData));
     loadAllData();
     refreshUsers();
     refreshMenu();
@@ -361,11 +365,10 @@ export default function AdminDashboard() {
       )}
       <nav className="admin-nav">
         <div className="admin-nav-brand"><h1>El Perri · Panel</h1></div>
-        <button className="btn-logout" onClick={() => {
-          if (typeof window !== "undefined") {
-            sessionStorage.removeItem("adminAuth");
-            window.location.href = "/admin/login";
-          }
+        <button className="btn-logout" onClick={async () => {
+          sessionStorage.removeItem("adminAuth");
+          await fetch("/api/auth/logout", { method: "POST" });
+          window.location.href = "/admin/login";
         }}>Cerrar sesión</button>
       </nav>
 
