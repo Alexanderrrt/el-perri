@@ -63,7 +63,7 @@ export function AdminLoginForm({ onSubmit }) {
           type="text"
           id="username"
           name="username"
-          placeholder="admin"
+          placeholder="Tu usuario"
           value={username}
           onChange={(e) => { setUsername(e.target.value); setError(null); }}
           autoFocus

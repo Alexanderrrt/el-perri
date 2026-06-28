@@ -1,7 +1,12 @@
 /**
  * GET/POST /api/cron/daily-lunch
  *
- * Sends today's "almuerzo del día" to every daily-lunch subscriber.
+ * Sends today's "almuerzo del día" to EVERY collected email:
+ *   - daily-lunch subscribers   (subscribers table, daily_lunch = true)
+ *   - registered newsletter users (registered_users table, newsletter = true)
+ * Addresses are merged and de-duplicated, so a person who both registered an
+ * account and opted into the lunch list only gets one email.
+ *
  * - Triggered automatically by Vercel Cron (see vercel.json), which sends
  *   `Authorization: Bearer ${CRON_SECRET}`.
  * - Can be triggered manually from the admin panel (same Bearer secret).
@@ -44,21 +49,49 @@ async function handler(request) {
     return Response.json({ error: "No hay almuerzo del día configurado" }, { status: 400 });
   }
 
+  // 1) Daily-lunch opt-ins
   const { data: subs, error: subsErr } = await supabase
     .from("subscribers")
     .select("email, name")
     .eq("daily_lunch", true);
   if (subsErr) return Response.json({ error: subsErr.message }, { status: 500 });
 
+  // 2) Registered users on the newsletter — they get the reminder too.
+  //    A missing table or column shouldn't break the lunch blast, so we
+  //    tolerate an error here and just fall back to the opt-in list.
+  const { data: users } = await supabase
+    .from("registered_users")
+    .select("email, name")
+    .eq("newsletter", true);
+
+  // Merge + de-dupe by lowercased email (first non-empty name wins).
+  const recipients = new Map();
+  for (const r of [...(subs || []), ...(users || [])]) {
+    const email = (r?.email || "").trim().toLowerCase();
+    if (!email) continue;
+    if (!recipients.has(email)) recipients.set(email, r.name || "");
+    else if (!recipients.get(email) && r.name) recipients.set(email, r.name);
+  }
+
   let sent = 0;
   let failed = 0;
-  for (const s of subs || []) {
-    const r = await sendDailyLunch(s.email, s.name, lunch);
-    if (r?.error || r?.skipped) failed++;
+  let skipped = 0;
+  for (const [email, name] of recipients) {
+    const r = await sendDailyLunch(email, name, lunch);
+    if (r?.skipped) skipped++;
+    else if (r?.error) failed++;
     else sent++;
   }
 
-  return Response.json({ ok: true, sent, failed, total: (subs || []).length });
+  return Response.json({
+    ok: true,
+    sent,
+    failed,
+    skipped,
+    total: recipients.size,
+    // Surfaces the most common "why didn't it send" cause to the admin panel.
+    note: skipped > 0 ? "Email no enviado: falta configurar RESEND_API_KEY" : undefined,
+  });
 }
 
 export const GET = handler;

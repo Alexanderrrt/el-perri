@@ -7,6 +7,7 @@ import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activeTab, setActiveTab] = useState("menu");
   const [notification, setNotification] = useState(null);
 
@@ -45,8 +46,22 @@ export default function AdminDashboard() {
   });
 
   useEffect(() => {
+    // Gate: the dashboard is admin-only. Without a valid session (set by the
+    // username + PIN login) we send the visitor straight to the login screen.
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
-    if (authData) setAdmin(JSON.parse(authData));
+    let parsed = null;
+    try {
+      parsed = authData ? JSON.parse(authData) : null;
+    } catch {
+      parsed = null;
+    }
+    if (!parsed || !parsed.adminToken) {
+      if (typeof window !== "undefined") window.location.replace("/admin/login");
+      return;
+    }
+    setAdmin(parsed);
+    setAuthChecked(true);
+
     loadAllData();
     refreshUsers();
     refreshMenu();
@@ -147,7 +162,11 @@ export default function AdminDashboard() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falló el envío");
-      notify(`✓ Correo enviado a ${data.sent} suscriptores`, "success");
+      if (data.note) {
+        notify(data.note, "error");
+      } else {
+        notify(`✓ Correo enviado a ${data.sent} de ${data.total} correos`, "success");
+      }
     } catch (err) {
       notify("No se pudo enviar: " + err.message, "error");
     } finally {
@@ -351,6 +370,16 @@ export default function AdminDashboard() {
 
   const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
   const lowStockItems = inventory.filter(i => parseInt(i.quantity) <= parseInt(i.minStock || 0));
+
+  // Don't render the panel until the admin session is verified (prevents a
+  // flash of admin content before the redirect to /admin/login).
+  if (!authChecked) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0a0a0a", color: "#ffd700", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 600 }}>
+        Verificando acceso…
+      </div>
+    );
+  }
 
   return (
     <div className="admin-dashboard">
