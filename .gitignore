@@ -56,3 +56,6 @@ coverage/
 
 # Binaries / tunneling tools (never commit)
 *.exe
+
+.vercel
+.env*
