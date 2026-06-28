@@ -10,6 +10,7 @@
     "lint": "eslint app/**/*.{js,jsx} lib/**/*.js --fix 2>/dev/null || echo 'ESLint not configured yet'",
     "test": "jest 2>/dev/null || echo 'Jest not configured yet'",
     "verify": "npm run build && echo '✅ Build verified — ready for commit'",
+    "check:supabase": "node scripts/check-supabase.mjs",
     "db:migrate": "node scripts/migrate-db.js",
     "db:seed": "node scripts/seed-db.js",
     "db:reset": "npm run db:migrate && npm run db:seed"
