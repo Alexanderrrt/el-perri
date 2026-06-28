@@ -6,6 +6,7 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [activeTab, setActiveTab] = useState("menu");
   const [notification, setNotification] = useState(null);
 
@@ -20,8 +21,27 @@ export default function AdminDashboard() {
   const [sendingLunch, setSendingLunch] = useState(false);
 
   useEffect(() => {
-    const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
-    if (authData) setAdmin(JSON.parse(authData));
+    if (typeof window === "undefined") return;
+
+    // Access gate: only an authenticated admin session may open the dashboard.
+    // Anyone hitting /admin/dashboard without a valid session token issued by
+    // /api/auth/admin-login is bounced to the login page before any data loads.
+    let session = null;
+    try {
+      session = JSON.parse(sessionStorage.getItem("adminAuth") || "null");
+    } catch {
+      session = null;
+    }
+
+    if (!session || !session.adminToken) {
+      // replace() so the unguarded dashboard never stays in browser history.
+      window.location.replace("/admin/login");
+      return;
+    }
+
+    setAdmin(session);
+    setAuthChecked(true);
+
     refreshMenu();
     refreshLunch();
 
@@ -178,6 +198,21 @@ export default function AdminDashboard() {
     return /^[0-9.]+$/.test(s) ? `$${s}` : s;
   };
 
+  // Hold the UI until the session has been verified. Without this the panel
+  // (and its data) would flash on screen for unauthenticated visitors before
+  // the redirect kicks in.
+  if (!authChecked) {
+    return (
+      <div className="admin-dashboard admin-gate">
+        <p className="admin-gate-text">Verificando acceso…</p>
+        <style jsx>{`
+          .admin-gate { align-items: center; justify-content: center; }
+          .admin-gate-text { color: #ffd700; font-weight: 600; }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
     <div className="admin-dashboard">
       {notification && (
@@ -186,7 +221,10 @@ export default function AdminDashboard() {
         </div>
       )}
       <nav className="admin-nav">
-        <div className="admin-nav-brand"><h1>El Perri · Panel</h1></div>
+        <div className="admin-nav-brand">
+          <h1>El Perri · Panel</h1>
+          {admin?.adminName && <span className="admin-nav-who">Sesión: {admin.adminName}</span>}
+        </div>
         <button className="btn-logout" onClick={() => {
           if (typeof window !== "undefined") {
             sessionStorage.removeItem("adminAuth");
@@ -333,6 +371,7 @@ export default function AdminDashboard() {
         .admin-dashboard { display: flex; flex-direction: column; min-height: 100vh; background: #0a0a0a; color: #fff; }
         .admin-nav { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 2rem; background: #1a1a1a; border-bottom: 1px solid rgba(255,215,0,0.1); }
         .admin-nav-brand h1 { margin: 0; color: #ffd700; }
+        .admin-nav-who { display: block; font-size: 0.8rem; color: rgba(255,255,255,0.5); margin-top: 0.25rem; }
         .admin-tabs { display: flex; gap: 0.5rem; padding: 1rem 2rem; background: #1a1a1a; border-bottom: 1px solid rgba(255,215,0,0.1); flex-wrap: wrap; }
         .tab-btn { padding: 0.75rem 1rem; background: transparent; border: 1px solid rgba(255,215,0,0.2); color: rgba(255,255,255,0.7); border-radius: 4px; cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap; }
         .tab-btn.active { background: #ffd700; color: #000; border-color: #ffd700; }

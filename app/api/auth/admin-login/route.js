@@ -2,9 +2,9 @@
  * POST /api/auth/admin-login
  * Simple admin auth: username + 4-digit PIN (no 2FA).
  *
- * Credentials come from env (set these in Vercel), with easy defaults:
- *   ADMIN_USERNAME (default "admin")
- *   ADMIN_PIN      (default "1234")
+ * Credentials come from env (set these in Vercel), with defaults:
+ *   ADMIN_USERNAME (default "4lex19")
+ *   ADMIN_PIN      (default "3451")
  *   ADMIN_NAME     (default "El Perri")
  *
  * Body: { username, pin }
@@ -18,8 +18,8 @@ import {
   addRateLimitHeaders,
 } from "@/lib/rateLimit";
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
-const ADMIN_PIN = process.env.ADMIN_PIN || "1234";
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "4lex19";
+const ADMIN_PIN = process.env.ADMIN_PIN || "3451";
 const ADMIN_NAME = process.env.ADMIN_NAME || "El Perri";
 
 export async function OPTIONS(request) {
