@@ -13,6 +13,11 @@
  */
 import { sendDailyLunchToAll } from "@/lib/dailyLunchSender";
 
+// Node runtime (uses node crypto / supabase-js) with headroom for the
+// email fan-out so a growing recipient list can't hit the default wall-clock.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 function authorized(request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
