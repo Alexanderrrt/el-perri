@@ -150,15 +150,13 @@ export default function AdminDashboard() {
       notify("Primero guarda el almuerzo del día", "error");
       return;
     }
-    const secret = typeof window !== "undefined"
-      ? window.prompt("Para enviar el correo ahora, escribe tu CRON_SECRET (de Vercel):")
-      : null;
-    if (!secret) return;
     setSendingLunch(true);
     try {
-      const res = await fetch("/api/cron/daily-lunch", {
+      // Authorized by the admin session (set at login) — no CRON_SECRET to type.
+      const auth = admin || JSON.parse(sessionStorage.getItem("adminAuth") || "{}");
+      const res = await fetch("/api/admin/send-daily-lunch", {
         method: "POST",
-        headers: { Authorization: `Bearer ${secret}` },
+        headers: { Authorization: `Bearer ${auth.adminToken || ""}` },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Falló el envío");
