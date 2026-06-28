@@ -1,9 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { listUsers, deleteUserById } from "@/lib/userStore";
 import { listMenuItems, addMenuItem, updateMenuItem, deleteMenuItem, subscribeToMenu } from "@/lib/menuStore";
 import { listDailySubscribers, deleteSubscriber, getDailySpecial, setDailySpecial } from "@/lib/lunchStore";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null);
@@ -15,75 +14,25 @@ export default function AdminDashboard() {
   const [editingId, setEditingId] = useState(null);
   const [menuForm, setMenuForm] = useState({ name: "", category: "", price: "", description: "", tag: "" });
 
-  const [orders, setOrders] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [users, setUsers] = useState([]);
-  const [userSearch, setUserSearch] = useState("");
-
   const [lunchText, setLunchText] = useState("");
   const [lunchSubs, setLunchSubs] = useState([]);
   const [savingLunch, setSavingLunch] = useState(false);
   const [sendingLunch, setSendingLunch] = useState(false);
 
-  const [inventory, setInventory] = useState([]);
-  const [showAddInventory, setShowAddInventory] = useState(false);
-  const [inventoryForm, setInventoryForm] = useState({ name: "", quantity: "", unit: "", minStock: "" });
-
-  const [staff, setStaff] = useState([]);
-  const [showAddStaff, setShowAddStaff] = useState(false);
-  const [staffForm, setStaffForm] = useState({ name: "", email: "", role: "", phone: "" });
-
-  const [promotions, setPromotions] = useState([]);
-  const [showAddPromo, setShowAddPromo] = useState(false);
-  const [promoForm, setPromoForm] = useState({ code: "", discount: "", type: "percent", expiry: "" });
-
-  const [settings, setSettings] = useState({
-    name: "El Perri Latin Food",
-    phone: "(555) 123-4567",
-    address: "1358 S Winchester Blvd",
-    hours: "12pm - 11pm Daily"
-  });
-
   useEffect(() => {
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
     if (authData) setAdmin(JSON.parse(authData));
-    loadAllData();
-    refreshUsers();
     refreshMenu();
     refreshLunch();
 
-    // Real-time: changes on ANY device update these tables live
+    // Real-time: menu changes on ANY device update this table live
     if (isSupabaseConfigured) {
-      const usersChannel = supabase
-        .channel("registered_users_changes")
-        .on(
-          "postgres_changes",
-          { event: "*", schema: "public", table: "registered_users" },
-          () => refreshUsers()
-        )
-        .subscribe();
       const unsubMenu = subscribeToMenu(() => refreshMenu());
       return () => {
-        supabase.removeChannel(usersChannel);
         unsubMenu();
       };
     }
   }, []);
-
-  const loadAllData = () => {
-    if (typeof window === "undefined") return;
-    const ordr = localStorage.getItem("orders");
-    const cust = localStorage.getItem("customers");
-    const inv = localStorage.getItem("inventory");
-    const stf = localStorage.getItem("staff");
-    const promo = localStorage.getItem("promotions");
-
-    if (ordr) setOrders(JSON.parse(ordr));
-    if (cust) setCustomers(JSON.parse(cust));
-    if (inv) setInventory(JSON.parse(inv));
-    if (stf) setStaff(JSON.parse(stf));
-    if (promo) setPromotions(JSON.parse(promo));
-  };
 
   const refreshMenu = async () => {
     try {
@@ -172,66 +121,6 @@ export default function AdminDashboard() {
     notify(`Se exportaron ${lunchSubs.length} suscriptores`, "success");
   };
 
-  const refreshUsers = async () => {
-    try {
-      setUsers(await listUsers());
-    } catch (err) {
-      notify("No se pudieron cargar los usuarios: " + err.message, "error");
-    }
-  };
-
-  const deleteUser = async (userId) => {
-    if (typeof window !== "undefined" && !window.confirm("¿Eliminar este usuario?")) return;
-    try {
-      await deleteUserById(userId);
-      await refreshUsers();
-      notify("Usuario eliminado", "success");
-    } catch (err) {
-      notify("No se pudo eliminar: " + err.message, "error");
-    }
-  };
-
-  const exportUsersCSV = () => {
-    if (users.length === 0) {
-      notify("No hay usuarios para exportar", "error");
-      return;
-    }
-    const headers = ["Correo", "Nombre", "Newsletter", "Registrado"];
-    const rows = users.map(u => [
-      u.email,
-      u.name || "N/A",
-      u.newsletter ? "Sí" : "No",
-      u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "N/A"
-    ]);
-    const csv = [headers, ...rows]
-      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(","))
-      .join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `el-perri-users-${new Date().toISOString().split("T")[0]}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    notify(`Se exportaron ${users.length} usuarios para marketing`, "success");
-  };
-
-  const exportEmailsOnly = () => {
-    if (users.length === 0) {
-      notify("No hay usuarios para exportar", "error");
-      return;
-    }
-    const emails = users.map(u => u.email).join(", ");
-    navigator.clipboard.writeText(emails).then(() => {
-      notify(`Se copiaron ${users.length} correos al portapapeles`, "success");
-    }).catch(() => {
-      notify("No se pudo copiar al portapapeles", "error");
-    });
-  };
-
   const notify = (message, type = "success") => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
@@ -289,69 +178,6 @@ export default function AdminDashboard() {
     return /^[0-9.]+$/.test(s) ? `$${s}` : s;
   };
 
-  const saveInventory = (items) => {
-    if (typeof window !== "undefined") localStorage.setItem("inventory", JSON.stringify(items));
-    setInventory(items);
-  };
-
-  const handleAddInventory = () => {
-    if (!inventoryForm.name || !inventoryForm.quantity) {
-      notify("El nombre y la cantidad son obligatorios", "error");
-      return;
-    }
-    saveInventory([...inventory, { ...inventoryForm, id: Date.now() }]);
-    setInventoryForm({ name: "", quantity: "", unit: "", minStock: "" });
-    setShowAddInventory(false);
-    notify("Insumo agregado", "success");
-  };
-
-  const deleteInventory = (id) => { saveInventory(inventory.filter(i => i.id !== id)); notify("Insumo eliminado", "success"); };
-
-  const saveStaff = (items) => {
-    if (typeof window !== "undefined") localStorage.setItem("staff", JSON.stringify(items));
-    setStaff(items);
-  };
-
-  const handleAddStaff = () => {
-    if (!staffForm.name || !staffForm.email) {
-      notify("El nombre y el correo son obligatorios", "error");
-      return;
-    }
-    saveStaff([...staff, { ...staffForm, id: Date.now() }]);
-    setStaffForm({ name: "", email: "", role: "", phone: "" });
-    setShowAddStaff(false);
-    notify("Empleado agregado", "success");
-  };
-
-  const deleteStaff = (id) => { saveStaff(staff.filter(s => s.id !== id)); notify("Empleado eliminado", "success"); };
-
-  const savePromo = (items) => {
-    if (typeof window !== "undefined") localStorage.setItem("promotions", JSON.stringify(items));
-    setPromotions(items);
-  };
-
-  const handleAddPromo = () => {
-    if (!promoForm.code || !promoForm.discount) {
-      notify("El código y el descuento son obligatorios", "error");
-      return;
-    }
-    savePromo([...promotions, { ...promoForm, id: Date.now() }]);
-    setPromoForm({ code: "", discount: "", type: "percent", expiry: "" });
-    setShowAddPromo(false);
-    notify("Promoción creada", "success");
-  };
-
-  const deletePromo = (id) => { savePromo(promotions.filter(p => p.id !== id)); notify("Promoción eliminada", "success"); };
-
-  const handleOrderStatus = (id, status) => {
-    const updated = orders.map(o => o.id === id ? { ...o, status } : o);
-    if (typeof window !== "undefined") localStorage.setItem("orders", JSON.stringify(updated));
-    setOrders(updated);
-  };
-
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
-  const lowStockItems = inventory.filter(i => parseInt(i.quantity) <= parseInt(i.minStock || 0));
-
   return (
     <div className="admin-dashboard">
       {notification && (
@@ -372,14 +198,6 @@ export default function AdminDashboard() {
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
         <button className={`tab-btn ${activeTab === "lunch" ? "active" : ""}`} onClick={() => setActiveTab("lunch")}>🍽️ Almuerzo del día</button>
-        <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>📦 Pedidos</button>
-        <button className={`tab-btn ${activeTab === "analytics" ? "active" : ""}`} onClick={() => setActiveTab("analytics")}>📊 Estadísticas</button>
-        <button className={`tab-btn ${activeTab === "customers" ? "active" : ""}`} onClick={() => setActiveTab("customers")}>👥 Clientes</button>
-        <button className={`tab-btn ${activeTab === "users" ? "active" : ""}`} onClick={() => setActiveTab("users")}>📧 Usuarios y Marketing</button>
-        <button className={`tab-btn ${activeTab === "inventory" ? "active" : ""}`} onClick={() => setActiveTab("inventory")}>📦 Inventario</button>
-        <button className={`tab-btn ${activeTab === "staff" ? "active" : ""}`} onClick={() => setActiveTab("staff")}>👔 Personal</button>
-        <button className={`tab-btn ${activeTab === "promotions" ? "active" : ""}`} onClick={() => setActiveTab("promotions")}>🎁 Promociones</button>
-        <button className={`tab-btn ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>⚙️ Ajustes</button>
       </div>
 
       <main className="admin-main">
@@ -480,241 +298,6 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
-
-        {activeTab === "orders" && (
-          <div>
-            <h2>Gestión de Pedidos</h2>
-            {orders.length === 0 ? (
-              <p className="empty-state">Aún no hay pedidos</p>
-            ) : (
-              <div className="cards-grid">
-                {orders.map(order => (
-                  <div key={order.id} className="card">
-                    <strong>Pedido #{order.id}</strong>
-                    <p>{order.customer} • ${order.total}</p>
-                    <select value={order.status} onChange={(e) => handleOrderStatus(order.id, e.target.value)}>
-                      <option value="pending">Pendiente</option>
-                      <option value="preparing">En preparación</option>
-                      <option value="ready">Listo</option>
-                      <option value="completed">Entregado</option>
-                    </select>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "analytics" && (
-          <div>
-            <h2>Estadísticas y Reportes</h2>
-            <div className="stats-grid">
-              <div className="stat"><h3>Pedidos totales</h3><p className="value">{orders.length}</p></div>
-              <div className="stat"><h3>Ingresos</h3><p className="value">${totalRevenue.toFixed(2)}</p></div>
-              <div className="stat"><h3>Platos en el menú</h3><p className="value">{menuItems.length}</p></div>
-              <div className="stat"><h3>Personal</h3><p className="value">{staff.length}</p></div>
-            </div>
-            {lowStockItems.length > 0 && <div className="alert alert-warning">⚠️ {lowStockItems.length} insumos con poco stock</div>}
-          </div>
-        )}
-
-        {activeTab === "customers" && (
-          <div>
-            <h2>Gestión de Clientes</h2>
-            {customers.length === 0 ? (
-              <p className="empty-state">Aún no hay clientes</p>
-            ) : (
-              <div className="cards-grid">
-                {customers.map(cust => (
-                  <div key={cust.id} className="card"><strong>{cust.name}</strong><p>{cust.email}</p><p className="small">Pedidos: {cust.orders}</p></div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "users" && (
-          <div>
-            <div className="section-header">
-              <h2>Usuarios y Marketing {isSupabaseConfigured && <span className="live-badge">● EN VIVO</span>}</h2>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button className="btn btn-small" onClick={refreshUsers}>🔄 Actualizar</button>
-                <button className="btn btn-small" onClick={exportEmailsOnly}>📋 Copiar correos</button>
-                <button className="btn btn-gold" onClick={exportUsersCSV}>⬇ Exportar CSV</button>
-              </div>
-            </div>
-
-            <div className="stats-grid" style={{ marginBottom: "2rem" }}>
-              <div className="stat"><h3>Usuarios totales</h3><p className="value">{users.length}</p></div>
-              <div className="stat"><h3>Suscritos al newsletter</h3><p className="value">{users.filter(u => u.newsletter).length}</p></div>
-              <div className="stat"><h3>Esta semana</h3><p className="value">{users.filter(u => u.createdAt && (Date.now() - new Date(u.createdAt).getTime()) < 7 * 864e5).length}</p></div>
-            </div>
-
-            <input
-              placeholder="Buscar por correo o nombre..."
-              value={userSearch}
-              onChange={(e) => setUserSearch(e.target.value)}
-              style={{ width: "100%", maxWidth: "400px", marginBottom: "1.5rem", background: "#0a0a0a", border: "1px solid rgba(255,215,0,0.2)", color: "#fff", padding: "0.75rem", borderRadius: "4px" }}
-            />
-
-            {users.length === 0 ? (
-              <p className="empty-state">Aún no hay usuarios registrados. Cuando alguien se registre en la burbuja de bienvenida, aparecerá aquí.</p>
-            ) : (
-              <div className="user-table">
-                <div className="user-row user-head">
-                  <span>Nombre</span>
-                  <span>Correo</span>
-                  <span>Newsletter</span>
-                  <span>Registro</span>
-                  <span></span>
-                </div>
-                {users
-                  .filter(u =>
-                    !userSearch ||
-                    u.email.toLowerCase().includes(userSearch.toLowerCase()) ||
-                    (u.name || "").toLowerCase().includes(userSearch.toLowerCase())
-                  )
-                  .map(user => (
-                    <div key={user.userId} className="user-row">
-                      <span><strong>{user.name}</strong></span>
-                      <span>{user.email}</span>
-                      <span>{user.newsletter ? "✅ Sí" : "—"}</span>
-                      <span className="small">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : "N/A"}</span>
-                      <span><button className="btn btn-small btn-danger" onClick={() => deleteUser(user.userId)}>Eliminar</button></span>
-                    </div>
-                  ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === "inventory" && (
-          <div>
-            <div className="section-header">
-              <h2>Gestión de Inventario</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddInventory(!showAddInventory)}>{showAddInventory ? "Cancelar" : "+ Agregar insumo"}</button>
-            </div>
-            {showAddInventory && (
-              <div className="form-section">
-                <input placeholder="Nombre del insumo" value={inventoryForm.name} onChange={(e) => setInventoryForm({...inventoryForm, name: e.target.value})} />
-                <input placeholder="Cantidad" type="number" value={inventoryForm.quantity} onChange={(e) => setInventoryForm({...inventoryForm, quantity: e.target.value})} />
-                <input placeholder="Unidad (kg, L, unid.)" value={inventoryForm.unit} onChange={(e) => setInventoryForm({...inventoryForm, unit: e.target.value})} />
-                <input placeholder="Alerta de stock mínimo" type="number" value={inventoryForm.minStock} onChange={(e) => setInventoryForm({...inventoryForm, minStock: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddInventory}>Agregar insumo</button>
-              </div>
-            )}
-            <div className="cards-grid">
-              {inventory.length === 0 ? (
-                <p className="empty-state">No hay insumos en el inventario</p>
-              ) : (
-                inventory.map(item => (
-                  <div key={item.id} className={`card ${parseInt(item.quantity) <= parseInt(item.minStock || 0) ? "low-stock" : ""}`}>
-                    <strong>{item.name}</strong>
-                    <p>{item.quantity} {item.unit}</p>
-                    <p className="small">Mín: {item.minStock}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deleteInventory(item.id)}>Eliminar</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "staff" && (
-          <div>
-            <div className="section-header">
-              <h2>Gestión de Personal</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddStaff(!showAddStaff)}>{showAddStaff ? "Cancelar" : "+ Agregar empleado"}</button>
-            </div>
-            {showAddStaff && (
-              <div className="form-section">
-                <input placeholder="Nombre completo" value={staffForm.name} onChange={(e) => setStaffForm({...staffForm, name: e.target.value})} />
-                <input placeholder="Correo" type="email" value={staffForm.email} onChange={(e) => setStaffForm({...staffForm, email: e.target.value})} />
-                <input placeholder="Cargo (Gerente, Chef, Mesero)" value={staffForm.role} onChange={(e) => setStaffForm({...staffForm, role: e.target.value})} />
-                <input placeholder="Teléfono" value={staffForm.phone} onChange={(e) => setStaffForm({...staffForm, phone: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddStaff}>Agregar empleado</button>
-              </div>
-            )}
-            <div className="cards-grid">
-              {staff.length === 0 ? (
-                <p className="empty-state">No hay empleados registrados</p>
-              ) : (
-                staff.map(member => (
-                  <div key={member.id} className="card">
-                    <strong>{member.name}</strong>
-                    <p className="role">{member.role}</p>
-                    <p className="small">{member.email}</p>
-                    <p className="small">{member.phone}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deleteStaff(member.id)}>Eliminar</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "promotions" && (
-          <div>
-            <div className="section-header">
-              <h2>Promociones y Descuentos</h2>
-              <button className="btn btn-gold" onClick={() => setShowAddPromo(!showAddPromo)}>{showAddPromo ? "Cancelar" : "+ Agregar promoción"}</button>
-            </div>
-            {showAddPromo && (
-              <div className="form-section">
-                <input placeholder="Código (VERANO20)" value={promoForm.code} onChange={(e) => setPromoForm({...promoForm, code: e.target.value.toUpperCase()})} />
-                <input placeholder="Descuento" type="number" step="0.01" value={promoForm.discount} onChange={(e) => setPromoForm({...promoForm, discount: e.target.value})} />
-                <select value={promoForm.type} onChange={(e) => setPromoForm({...promoForm, type: e.target.value})}>
-                  <option value="percent">Porcentaje (%)</option>
-                  <option value="fixed">Monto fijo ($)</option>
-                </select>
-                <input placeholder="Fecha de vencimiento" type="date" value={promoForm.expiry} onChange={(e) => setPromoForm({...promoForm, expiry: e.target.value})} />
-                <button className="btn btn-gold" onClick={handleAddPromo}>Agregar promoción</button>
-              </div>
-            )}
-            <div className="cards-grid">
-              {promotions.length === 0 ? (
-                <p className="empty-state">No hay promociones</p>
-              ) : (
-                promotions.map(promo => (
-                  <div key={promo.id} className="card">
-                    <strong>{promo.code}</strong>
-                    <p className="discount">{promo.discount}{promo.type === "percent" ? "%" : "$"} de descuento</p>
-                    <p className="small">Vence: {promo.expiry}</p>
-                    <button className="btn btn-small btn-danger" onClick={() => deletePromo(promo.id)}>Eliminar</button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
-
-        {activeTab === "settings" && (
-          <div>
-            <h2>Ajustes del Restaurante</h2>
-            <div className="settings-form">
-              <div className="form-group">
-                <label>Nombre del restaurante</label>
-                <input value={settings.name} onChange={(e) => setSettings({...settings, name: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>Teléfono</label>
-                <input value={settings.phone} onChange={(e) => setSettings({...settings, phone: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>Dirección</label>
-                <input value={settings.address} onChange={(e) => setSettings({...settings, address: e.target.value})} />
-              </div>
-              <div className="form-group">
-                <label>Horario</label>
-                <input value={settings.hours} onChange={(e) => setSettings({...settings, hours: e.target.value})} />
-              </div>
-              <button className="btn btn-gold" onClick={() => {
-                if (typeof window !== "undefined") localStorage.setItem("settings", JSON.stringify(settings));
-                notify("Ajustes guardados", "success");
-              }}>Guardar cambios</button>
-            </div>
-          </div>
-        )}
       </main>
 
       <style jsx>{`
@@ -765,21 +348,7 @@ export default function AdminDashboard() {
         .category { color: rgba(255,215,0,0.6); font-size: 0.9rem; margin: 0; }
         .price { color: #ffd700; font-weight: bold; font-size: 1.2rem; margin: 0; }
         .desc { color: rgba(255,255,255,0.6); font-size: 0.85rem; line-height: 1.3; }
-        .card.low-stock { border-color: #ff6b6b; background: rgba(255,107,107,0.1); }
-        .role { color: rgba(255,215,0,0.6); margin: 0.5rem 0; }
-        .discount { color: #4caf50; font-weight: bold; margin: 0.5rem 0; }
         .small { font-size: 0.85rem; color: rgba(255,255,255,0.5); margin: 0.25rem 0; }
-        .card select { width: 100%; padding: 0.5rem; background: #0a0a0a; border: 1px solid rgba(255,215,0,0.2); color: #fff; border-radius: 4px; margin-top: 0.5rem; cursor: pointer; }
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-        .stat { background: #1a1a1a; border: 1px solid rgba(255,215,0,0.2); border-radius: 8px; padding: 1.5rem; text-align: center; }
-        .stat h3 { margin: 0 0 1rem 0; color: #ffd700; text-transform: uppercase; font-size: 0.9rem; }
-        .stat .value { margin: 0; font-size: 2.5rem; font-weight: bold; color: #ffd700; }
-        .alert { padding: 1rem; border-radius: 8px; margin-bottom: 1.5rem; border-left: 4px solid; }
-        .alert-warning { background: rgba(255,193,7,0.1); border-left-color: #ffc107; color: #ffc107; }
-        .settings-form { display: flex; flex-direction: column; gap: 1.5rem; max-width: 600px; }
-        .form-group { display: flex; flex-direction: column; gap: 0.5rem; }
-        .form-group label { font-weight: 600; color: #ffd700; font-size: 0.9rem; }
-        .form-group input { background: #0a0a0a; border: 1px solid rgba(255,215,0,0.2); color: #fff; padding: 0.75rem; border-radius: 4px; }
         .btn { padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-weight: 600; border: none; font-size: 1rem; transition: all 0.2s; }
         .btn-gold { background: #ffd700; color: #000; }
         .btn-gold:hover { background: #ffed4e; transform: translateY(-2px); }
