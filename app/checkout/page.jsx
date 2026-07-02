@@ -1,32 +1,21 @@
-"use client";
-import { GuestCheckoutForm } from "@/app/components/GuestCheckoutForm";
+import { CheckoutClient } from "../components";
+import { SITE } from "../site.config";
+
+export const metadata = {
+  title: `Checkout · ${SITE.name}`,
+  robots: { index: false },
+};
 
 export default function CheckoutPage() {
-  const handleGuestCheckout = async (formData) => {
-    try {
-      const response = await fetch("/api/checkout/guest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to process order");
-      }
-
-      const data = await response.json();
-      // Redirect to payment or confirmation
-      window.location.href = `/order-confirmation/${data.orderId}`;
-    } catch (error) {
-      throw error;
-    }
-  };
-
   return (
-    <main className="checkout-page">
-      <div className="checkout-container">
-        <GuestCheckoutForm onSubmit={handleGuestCheckout} isLoading={false} />
-      </div>
+    <main>
+      <header className="page-head" style={{ paddingBottom: 8 }}>
+        <p className="kicker">Tu pedido</p>
+        <h1 className="h1">Confirmar y pagar</h1>
+      </header>
+      <section className="section" style={{ paddingTop: 24 }}>
+        <CheckoutClient />
+      </section>
     </main>
   );
 }

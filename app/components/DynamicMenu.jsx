@@ -3,11 +3,20 @@ import { useEffect, useState } from "react";
 import { Reveal, OrderButton } from "./index";
 import { SITE, waLink } from "../site.config";
 import { listMenuItems, subscribeToMenu } from "@/lib/menuStore";
+import { parsePrice } from "@/lib/price";
+import { addItem } from "@/lib/cart";
 
 export function DynamicMenu() {
   const [menuGroups, setMenuGroups] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [justAdded, setJustAdded] = useState(null);
+
+  const handleAdd = (item) => {
+    addItem(item);
+    setJustAdded(item.id);
+    setTimeout(() => setJustAdded((id) => (id === item.id ? null : id)), 1400);
+  };
 
   useEffect(() => {
     fetchMenuItems();
@@ -80,17 +89,29 @@ export function DynamicMenu() {
                 </div>
                 <div className="row-cta">
                   <span className="row-price">{item.price}</span>
-                  {SITE.whatsapp && (
-                    <a
-                      className="row-order"
-                      href={waLink(`Hola El Perri 👋 Quiero pedir: ${item.name} (${item.price})`)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      aria-label={`Pedir ${item.name} por WhatsApp`}
-                    >
-                      Pedir
-                    </a>
-                  )}
+                  <div className="row-actions">
+                    {parsePrice(item.price) != null && (
+                      <button
+                        type="button"
+                        className="row-add"
+                        onClick={() => handleAdd(item)}
+                        aria-label={`Agregar ${item.name} al pedido`}
+                      >
+                        {justAdded === item.id ? "✓ Agregado" : "Agregar +"}
+                      </button>
+                    )}
+                    {SITE.whatsapp && (
+                      <a
+                        className="row-order"
+                        href={waLink(`Hola El Perri 👋 Quiero pedir: ${item.name} (${item.price})`)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Pedir ${item.name} por WhatsApp`}
+                      >
+                        Pedir
+                      </a>
+                    )}
+                  </div>
                 </div>
               </div>
             ))}

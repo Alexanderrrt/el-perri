@@ -32,6 +32,9 @@ export const SITE = {
   hours: [
     ["Lun–Dom", "12pm – 11pm"],
   ],
+  // San José, CA combined sales tax rate applied at checkout.
+  // Confirm the current rate with the owner/CPA before relying on it.
+  TAX_RATE: 0.09375,
   // Paste your ordering platform URL here and every "Ordenar" CTA switches to it
   // (WhatsApp is the fallback until then). The business already takes payments
   // with Square: their free Square Online ordering page URL goes here

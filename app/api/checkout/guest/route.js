@@ -1,82 +1,157 @@
 /**
  * POST /api/checkout/guest
- * Guest checkout — creates order without account.
- * Collects: email, phone, delivery_address, marketing_consent.
- * Initiates double opt-in email flow if marketing_consent = true.
+ * Guest checkout — creates an order without an account.
  *
- * Body: { email, phone, delivery_address, marketing_consent, items, total, csrfToken }
- * Response: { orderId, orderNumber, confirmationEmail sent }
+ * Money is never trusted from the client: every item price is looked up
+ * fresh from the live menu (lib/menuStore.js), any promo code is
+ * revalidated (lib/promotionsStore.js), and tax is applied server-side.
+ * If the recomputed total doesn't match what the client displayed, the
+ * request is rejected — this also catches a stale cart after a price change.
+ *
+ * When Square is configured (lib/square.js) the card is charged BEFORE the
+ * order is created; a decline stops the order. Without Square, checkout
+ * proceeds as "pay at pickup" so the flow stays usable pre-launch.
+ *
+ * Body: { email, phone, fulfillment, delivery_address, marketing_consent,
+ *         items: [{id, name, quantity}], total, discount_code, payment_token,
+ *         csrfToken }
+ * Response: { orderId, orderNumber, paid, confirmationEmailSent }
  */
-import { v4 as uuidv4 } from "uuid"; // npm install uuid
-import { sendEmail } from "@/lib/email"; // Email service
-import { logAudit } from "@/lib/audit"; // Audit logging
-import { validateCSRFToken } from "@/lib/csrf"; // CSRF protection
-import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors"; // CORS
+import { v4 as uuidv4 } from "uuid";
+import { sendEmail } from "@/lib/email";
+import { logAudit } from "@/lib/audit";
+import { validateCSRFToken } from "@/lib/csrf";
+import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors";
+import { createCheckoutLimiter, checkAndRespond } from "@/lib/rateLimit";
+import { listMenuItems } from "@/lib/menuStore";
+import { parsePrice } from "@/lib/price";
+import { findActivePromo } from "@/lib/promotionsStore";
+import { isSquareConfigured, createSquarePayment } from "@/lib/square";
+import { SITE } from "@/app/site.config";
 import {
   GuestCheckoutSchema,
   validateRequest,
   validationErrorResponse,
-} from "@/lib/validation"; // Input validation
+} from "@/lib/validation";
 
-/**
- * Handle CORS preflight requests
- */
+const checkoutLimiter = createCheckoutLimiter();
+
 export async function OPTIONS(request) {
   return handleCORSPreflight(request.headers.get("origin"));
 }
 
+/** Recompute the order total from the live menu — never trust the client. */
+async function recomputeTotal(items, discountCode) {
+  const menu = await listMenuItems();
+  const byId = new Map(menu.map((m) => [m.id, m]));
+
+  const lines = [];
+  for (const { id, name, quantity } of items) {
+    const menuItem = byId.get(id);
+    if (!menuItem) return { error: `Item no disponible: ${name || id}` };
+    const price = parsePrice(menuItem.price);
+    if (price == null) return { error: `${menuItem.name} no está disponible para pedir en línea` };
+    lines.push({ id, name: menuItem.name, price, quantity });
+  }
+
+  const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
+
+  let discount = 0;
+  let promo = null;
+  if (discountCode) {
+    promo = await findActivePromo(discountCode);
+    if (promo) {
+      discount = promo.type === "fixed" ? promo.discount : subtotal * (promo.discount / 100);
+    }
+  }
+
+  const taxable = Math.max(0, subtotal - discount);
+  const tax = taxable * (SITE.TAX_RATE || 0);
+  const total = Math.round((taxable + tax) * 100) / 100;
+
+  return { lines, subtotal, discount, promo, tax, total };
+}
+
 export async function POST(request) {
+  const origin = request.headers.get("origin");
+
+  const rateCheck = checkAndRespond(request, checkoutLimiter);
+  if (!rateCheck.allowed) {
+    return applyCORSHeaders(rateCheck.response, origin);
+  }
+
   try {
-    const origin = request.headers.get("origin");
     const body = await request.json();
 
-    // Validation with Zod
     const validation = validateRequest(GuestCheckoutSchema, body);
     if (!validation.valid) {
-      const response = validationErrorResponse(validation.errors);
-      return applyCORSHeaders(response, origin);
+      return applyCORSHeaders(validationErrorResponse(validation.errors), origin);
     }
 
     const {
       email,
       phone,
+      fulfillment,
       delivery_address,
       marketing_consent,
       items,
-      total,
+      total: clientTotal,
+      discount_code,
+      payment_token,
       csrfToken,
     } = validation.data;
 
-    // Validate CSRF token
     if (!validateCSRFToken(csrfToken)) {
-      const response = Response.json(
-        { error: "Invalid or missing CSRF token" },
-        { status: 403 }
+      return applyCORSHeaders(
+        Response.json({ error: "Invalid or missing CSRF token" }, { status: 403 }),
+        origin
       );
-      return applyCORSHeaders(response, origin);
     }
 
-    // Check if customer already exists
-    // In production: SELECT * FROM customers WHERE email = ? AND customer_type = 'guest'
-    const existingCustomer = null; // Mock
-
-    // Create or get customer
-    const customerId = existingCustomer?.id || uuidv4();
-    const orderNumber = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(Math.floor(Math.random() * 10000)).padStart(4, "0")}`;
-
-    // Create customer record if new
-    if (!existingCustomer) {
-      // INSERT INTO customers (id, email, phone, customer_type, marketing_consent, created_at)
-      // VALUES (?, ?, ?, 'guest', ?, NOW())
-      console.log(`[CUSTOMER] New guest: ${email}`);
+    const computed = await recomputeTotal(items, discount_code);
+    if (computed.error) {
+      return applyCORSHeaders(Response.json({ error: computed.error }, { status: 400 }), origin);
+    }
+    if (Math.abs(computed.total - clientTotal) > 0.01) {
+      return applyCORSHeaders(
+        Response.json(
+          { error: "El total cambió. Revisa tu pedido e intenta de nuevo.", total: computed.total },
+          { status: 400 }
+        ),
+        origin
+      );
     }
 
-    // Create order
-    // INSERT INTO orders (customer_id, order_number, items, total, status, created_at)
-    // VALUES (?, ?, ?, ?, 'pending', NOW())
     const orderId = uuidv4();
+    const orderNumber = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(
+      Math.floor(Math.random() * 10000)
+    ).padStart(4, "0")}`;
 
-    // Log in audit trail
+    let paid = false;
+    if (isSquareConfigured) {
+      if (!payment_token) {
+        return applyCORSHeaders(
+          Response.json({ error: "Falta el método de pago" }, { status: 400 }),
+          origin
+        );
+      }
+      const charge = await createSquarePayment({
+        amountCents: Math.round(computed.total * 100),
+        sourceId: payment_token,
+        idempotencyKey: orderId,
+        note: `El Perri — ${orderNumber}`,
+        buyerEmail: email,
+      });
+      if (!charge.ok) {
+        return applyCORSHeaders(Response.json({ error: charge.message }, { status: 402 }), origin);
+      }
+      paid = true;
+    }
+
+    // Order persistence to a real `orders` table is a follow-up (see
+    // docs/REMAINING-HANDOFF.md) — this mirrors the existing mock pattern.
+    console.log(`[ORDER] ${orderNumber} — ${email} — $${computed.total} — paid=${paid}`);
+
     await logAudit({
       entityType: "order",
       entityId: orderId,
@@ -84,41 +159,35 @@ export async function POST(request) {
       actorType: "anonymous",
       ipAddress: request.headers.get("x-forwarded-for") || "unknown",
       userAgent: request.headers.get("user-agent"),
-      newValues: { orderNumber, total, email },
+      newValues: { orderNumber, total: computed.total, email, paid },
     });
 
-    // Handle marketing consent
     if (marketing_consent) {
-      // UPDATE customers SET marketing_consent = 'pending_confirmation' WHERE id = ?
-      // INSERT INTO marketing_consent_history (...)
-
-      // Send double opt-in email
-      const confirmUrl = `${process.env.NEXT_PUBLIC_BASE_URL}/email/confirm?token=${uuidv4()}`;
+      const confirmUrl = `${SITE.website}/email/confirm?token=${uuidv4()}`;
       await sendEmail({
         to: email,
         template: "guest-confirm-email",
         data: {
           orderNumber,
           confirmUrl,
-          unsubscribeUrl: `${process.env.NEXT_PUBLIC_BASE_URL}/email/unsubscribe?email=${encodeURIComponent(email)}`,
+          unsubscribeUrl: `${SITE.website}/email/unsubscribe?email=${encodeURIComponent(email)}`,
         },
       });
-
-      console.log(`[EMAIL] Double opt-in sent to: ${email}`);
-    } else {
-      // UPDATE customers SET marketing_consent = 'opted_out' WHERE id = ?
-      console.log(`[MARKETING] Guest opted out: ${email}`);
     }
 
-    // Send order confirmation email
     await sendEmail({
       to: email,
       template: "order-confirmation",
       data: {
         orderNumber,
-        items,
-        total,
-        deliveryAddress: delivery_address,
+        items: computed.lines,
+        subtotal: computed.subtotal,
+        discount: computed.discount,
+        tax: computed.tax,
+        total: computed.total,
+        fulfillment,
+        deliveryAddress: fulfillment === "delivery" ? delivery_address : null,
+        paid,
         estimatedTime: "30-45 minutes",
       },
     });
@@ -127,6 +196,8 @@ export async function POST(request) {
       {
         orderId,
         orderNumber,
+        total: computed.total,
+        paid,
         message: "Order created successfully",
         confirmationEmailSent: true,
         doubleOptInEmailSent: marketing_consent,
@@ -136,10 +207,9 @@ export async function POST(request) {
     return applyCORSHeaders(response, origin);
   } catch (error) {
     console.error("[ERROR] Guest checkout failed:", error);
-    const response = Response.json(
-      { error: "Failed to create order" },
-      { status: 500 }
+    return applyCORSHeaders(
+      Response.json({ error: "Failed to create order" }, { status: 500 }),
+      request.headers.get("origin")
     );
-    return applyCORSHeaders(response, request.headers.get("origin"));
   }
 }
