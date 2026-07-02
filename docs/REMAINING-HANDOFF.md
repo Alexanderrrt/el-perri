@@ -56,9 +56,20 @@ Already wired in code — just toggle **Analytics** and **Speed Insights** on in
 Vercel project dashboard.
 
 ## Minor code follow-ups (no external dependency)
-- `app/site.config.js:17` `email` is `"elperrilatinfood.com"` (not an email) — set a real address.
-- Persist admin-managed promotions to the Supabase `promotions` table (it already
-  has rows) instead of the static list in `/api/promotions` + in-memory `/api/admin/promotions`.
+- ~~`app/site.config.js` `email` field misused~~ — **done**: field is now empty with a
+  comment; set the real business inbox when there is one.
+- ~~Persist admin-managed promotions to Supabase~~ — **done**: `lib/promotionsStore.js`
+  backs both `/api/promotions` and `/api/admin/promotions` (service-role writes,
+  in-memory fallback without env keys).
+- ~~`preload="none"` on the home video~~ — **done** (autoplay removed too); moving the
+  9MB `public/historia.mp4` to Vercel Blob still pending (needs the Blob store).
 - Make `lib/audit.js` insert into real audit tables (needs the tables created first).
-- Move the 9MB `public/historia.mp4` to Vercel Blob with `preload="none"`.
 - Swap remaining raw `<img>` (Nav/Footer/OrderAssistant) to `next/image`; adopt `next/font`.
+
+## New since the audit (ordering funnel)
+- Orders and catering quotes now flow through **WhatsApp** (`SITE.whatsapp` in
+  `app/site.config.js` — currently the business phone). If the business number
+  isn't on WhatsApp, either register it with WhatsApp Business or set the field
+  to `""` to fall back to phone calls.
+- Catering leads email to **`CATERING_EMAIL`** (set in Vercel alongside
+  `RESEND_API_KEY`); until configured the form falls back to WhatsApp.
