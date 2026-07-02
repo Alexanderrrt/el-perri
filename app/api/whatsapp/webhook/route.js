@@ -9,10 +9,18 @@
  *        this is what stops a spoofed request from creating fake orders.
  *        Always replies 200 to Meta (even on internal errors) to avoid
  *        retry storms; a bad signature is the one case that gets 401.
+ *
+ *        The AI turn + outbound reply run AFTER the 200 ack, via next/server's
+ *        `after()`. Meta expects a webhook ack within a few seconds and retries
+ *        otherwise (which would duplicate orders); the reply is delivered by a
+ *        separate outbound WhatsApp API call, so there's no reason to block the
+ *        ack on the (potentially slow) model call.
  */
+import { after } from "next/server";
 import { verifyWhatsAppSignature, sendWhatsAppMessage } from "@/lib/whatsapp";
 import { runTurn } from "@/lib/whatsappBot";
 import { createWhatsAppLimiter } from "@/lib/rateLimit";
+import { SITE } from "@/app/site.config";
 
 const whatsAppLimiter = createWhatsAppLimiter();
 
@@ -68,8 +76,19 @@ export async function POST(request) {
       return Response.json({ ok: true });
     }
 
-    const reply = await runTurn(from, message.text.body);
-    await sendWhatsAppMessage(from, reply);
+    // Ack Meta immediately; run the AI turn + reply in the background.
+    after(async () => {
+      try {
+        const reply = await runTurn(from, message.text.body);
+        await sendWhatsAppMessage(from, reply);
+      } catch (error) {
+        console.error("[WHATSAPP] background turn failed:", error.message);
+        await sendWhatsAppMessage(
+          from,
+          `Uy, se nos complicó procesar tu mensaje 😅 Intenta de nuevo o llámanos al ${SITE.phone}.`
+        ).catch(() => {});
+      }
+    });
 
     return Response.json({ ok: true });
   } catch (error) {
