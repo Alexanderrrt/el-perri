@@ -112,18 +112,20 @@ server executes them against the real menu and the same pricing logic the web
 checkout uses (`lib/orderPricing.js`). Fully built and ready — needs two
 external accounts to actually receive/send WhatsApp messages:
 
-**1. DeepSeek API key (via NVIDIA)**
-This project runs DeepSeek through **NVIDIA's** OpenAI-compatible gateway
-(key starts with `nvapi-`, from build.nvidia.com). Set in Vercel:
-   - **`DEEPSEEK_API_KEY`** = your `nvapi-…` key
-   - **`DEEPSEEK_BASE_URL`** = `https://integrate.api.nvidia.com/v1`
-   - **`DEEPSEEK_MODEL`** = `deepseek-ai/deepseek-v4-pro` (supports the
-     tool-calling the bot needs; override with a faster/cheaper variant here
-     without any code change)
+**1. AI model API key (Groq free tier)**
+The bot talks to any OpenAI-compatible LLM endpoint with function-calling.
+Default is **Groq's free tier** — fast (~1–3s replies) and no credit card.
+1. console.groq.com → sign in → **API Keys** → **Create API Key** (starts `gsk_`).
+2. Set in Vercel:
+   - **`LLM_API_KEY`** = your `gsk_…` key
+   - **`LLM_BASE_URL`** = `https://api.groq.com/openai/v1`
+   - **`LLM_MODEL`** = `openai/gpt-oss-120b` (strong tool-calling; free)
 Paste the key directly into the dashboard/env file — never into a chat with an
-AI assistant, since that can leak it into logs. (To switch to DeepSeek's own
-API later: key `sk-…`, `DEEPSEEK_BASE_URL=https://api.deepseek.com`, model
-`deepseek-chat` — see `.env.example`.)
+AI assistant, since that can leak it into logs. Free-tier limits (~1,000
+requests/day) are plenty for a food truck. To switch providers later, just
+change those three vars — no code change (DeepSeek: `sk-…` +
+`https://api.deepseek.com` + `deepseek-chat`; NVIDIA works too but its free
+tier is too slow — ~50s/reply — for live chat).
 
 **2. Meta WhatsApp Business Cloud API** (the official API — different from the
 regular WhatsApp Business app already used for the site's click-to-chat links)
