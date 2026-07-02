@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Reveal, OrderButton } from "./index";
-import { SITE } from "../site.config";
+import { SITE, waLink } from "../site.config";
 import { listMenuItems, subscribeToMenu } from "@/lib/menuStore";
 
 export function DynamicMenu() {
@@ -78,7 +78,20 @@ export function DynamicMenu() {
                   </div>
                   {item.description && <p className="row-desc">{item.description}</p>}
                 </div>
-                <span className="row-price">{item.price}</span>
+                <div className="row-cta">
+                  <span className="row-price">{item.price}</span>
+                  {SITE.whatsapp && (
+                    <a
+                      className="row-order"
+                      href={waLink(`Hola El Perri 👋 Quiero pedir: ${item.name} (${item.price})`)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Pedir ${item.name} por WhatsApp`}
+                    >
+                      Pedir
+                    </a>
+                  )}
+                </div>
               </div>
             ))}
           </div>

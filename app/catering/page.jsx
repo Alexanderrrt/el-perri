@@ -1,4 +1,4 @@
-import { Slot, Reveal, OrderButton } from "../components";
+import { Slot, Reveal, CateringForm } from "../components";
 import { SITE } from "../site.config";
 
 export const metadata = {
@@ -20,11 +20,6 @@ const IconCalendar = () => (
 const IconUsers = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
     <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-  </svg>
-);
-const IconPhone = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2.2Z" />
   </svg>
 );
 const IconInstagram = () => (
@@ -90,26 +85,21 @@ export default function Catering() {
                 <h2 className="h2">Hablemos</h2>
               </div>
               <p>
-                Cuéntanos la fecha, el lugar y cuántos invitados, y armamos una propuesta a tu medida.
-                La forma más rápida es una llamada o un mensaje por Instagram.
+                Cuéntanos la fecha, el lugar y cuántos invitados, y armamos una propuesta a tu
+                medida. Déjanos tus datos y te contactamos — o si prefieres, llámanos al{" "}
+                <a href={SITE.phoneHref} style={{ color: "var(--ink)", fontWeight: 700 }}>
+                  {SITE.phone}
+                </a>{" "}
+                (Lun–Dom · 12pm – 11pm).
               </p>
-              <div className="callout" style={{ marginTop: 8 }}>
-                <p style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-                  <span className="footer-contact"><IconPhone /></span>
-                  <a href={SITE.phoneHref} className="footer-link" style={{ color: "var(--ink)", fontSize: 18 }}>
-                    {SITE.phone}
-                  </a>
-                </p>
-                <p style={{ margin: 0 }}>Lun–Dom · 12pm – 11pm</p>
-              </div>
+              <CateringForm />
               <div className="section-actions" style={{ marginTop: 22 }}>
-                <a href={SITE.phoneHref} className="btn btn-primary">Llámanos</a>
+                <a href={SITE.phoneHref} className="btn btn-dark">Llámanos</a>
                 {SITE.social?.instagram && (
-                  <a href={SITE.social.instagram} className="btn btn-dark" target="_blank" rel="noopener noreferrer">
+                  <a href={SITE.social.instagram} className="btn btn-gold" target="_blank" rel="noopener noreferrer">
                     <IconInstagram /> Escríbenos
                   </a>
                 )}
-                <a href="/menu" className="btn btn-gold">Ver el menú</a>
               </div>
             </div>
           </Reveal>
