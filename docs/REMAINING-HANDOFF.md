@@ -67,17 +67,31 @@ Vercel project dashboard.
 - Swap remaining raw `<img>` (Nav/Footer/OrderAssistant) to `next/image`; adopt `next/font`.
 
 ## New since the audit (ordering funnel)
-- **Square online ordering (recommended next step):** the business already uses
-  Square for payments, so they can publish a free Square Online ordering page
-  (Square Dashboard → Online), and paste its URL into `ORDER_URL` in
-  `app/site.config.js`. Every "Ordenar" CTA then goes straight to Square
-  checkout — real cards, their existing account, no new fees beyond Square's
-  processing. WhatsApp stays as the fallback and the site-wide chat bubble.
-  A deeper in-site checkout (Square Web Payments SDK on `/checkout`) is
-  possible later but needs their Square developer credentials.
-- Orders and catering quotes now flow through **WhatsApp** (`SITE.whatsapp` in
-  `app/site.config.js` — currently the business phone). If the business number
-  isn't on WhatsApp, either register it with WhatsApp Business or set the field
-  to `""` to fall back to phone calls.
+- **In-site checkout with Square as the payment processor.** `/menu` now has a
+  real cart (`lib/cart.js`, localStorage) and `/checkout` charges the card
+  directly on the site — Square never redirects the customer away. The card
+  field is Square's own **Web Payments SDK** (PCI-compliant, card numbers
+  never touch our server); our API charges the resulting token via Square's
+  **Payments API** (`lib/square.js`). To go live:
+  1. developer.squareup.com → create/open an app → **Sandbox** tab first to
+     test, then **Production** when ready.
+  2. Set in Vercel: `SQUARE_ACCESS_TOKEN`, `SQUARE_LOCATION_ID`,
+     `SQUARE_ENVIRONMENT`, `NEXT_PUBLIC_SQUARE_APP_ID`,
+     `NEXT_PUBLIC_SQUARE_LOCATION_ID`, `NEXT_PUBLIC_SQUARE_ENVIRONMENT`
+     (see `.env.example` for exactly where each value comes from).
+  3. Test with Square's sandbox test card `4111 1111 1111 1111` (any future
+     expiry/CVV) before flipping to production credentials.
+  4. Confirm the `TAX_RATE` in `app/site.config.js` (currently 9.375% for San
+     José) with your accountant.
+  Without these env vars set, checkout still works as "pay at pickup" —
+  useful for demos, but **not real payments** until Square is configured.
+- Orders are **not yet written to a database** — `/api/checkout/guest` logs
+  and emails each order but there's no `orders` table read/write yet. Add
+  that once the Supabase RLS work above lands (order #1 in this doc).
+- Orders and catering quotes also flow through **WhatsApp** (`SITE.whatsapp`
+  in `app/site.config.js` — currently the business phone) as a no-setup
+  fallback and for items with non-numeric prices ("$17 / $18", "+$2") that
+  the cart can't checkout online. If the business number isn't on WhatsApp,
+  register it with WhatsApp Business or set the field to `""`.
 - Catering leads email to **`CATERING_EMAIL`** (set in Vercel alongside
   `RESEND_API_KEY`); until configured the form falls back to WhatsApp.
