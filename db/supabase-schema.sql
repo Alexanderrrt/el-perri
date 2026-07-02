@@ -26,17 +26,42 @@ create table if not exists menu_items (
 );
 
 -- ---------- orders ----------
+-- id is the human-readable order number itself (e.g. "ORD-20260702-4201").
+-- Holds customer PII (phone/address/email) — no anon policy, service-role only.
 create table if not exists orders (
-  id          text primary key,
-  customer    text,
-  email       text,
-  phone       text,
-  address     text,
-  items       jsonb default '[]'::jsonb,
-  total       numeric default 0,
-  status      text default 'pending',
-  created_at  timestamptz default now()
+  id            text primary key,
+  order_number  text,
+  customer      text,
+  email         text,
+  phone         text,
+  address       text,
+  items         jsonb default '[]'::jsonb,
+  total         numeric default 0,
+  status        text default 'pendiente',    -- pendiente|preparando|listo|entregado|cancelado
+  fulfillment   text default 'recoger',       -- recoger|domicilio
+  source        text default 'web',           -- web|whatsapp
+  paid          boolean default false,
+  created_at    timestamptz default now()
 );
+alter table orders add column if not exists order_number text;
+alter table orders add column if not exists fulfillment  text default 'recoger';
+alter table orders add column if not exists source       text default 'web';
+alter table orders add column if not exists paid         boolean default false;
+create index if not exists orders_status_idx on orders(status);
+
+-- ---------- whatsapp_sessions (in-progress AI order conversations) ----------
+-- Ephemeral per-phone-number state between stateless webhook invocations.
+-- PII (phone + chat content) — no anon policy, service-role only.
+create table if not exists whatsapp_sessions (
+  phone       text primary key,
+  history     jsonb default '[]'::jsonb,
+  cart        jsonb default '[]'::jsonb,
+  fulfillment jsonb default 'null'::jsonb,
+  customer    jsonb default 'null'::jsonb,
+  updated_at  timestamptz default now()
+);
+alter table whatsapp_sessions enable row level security;
+-- No policies created for whatsapp_sessions => anon fully denied by default.
 
 -- ---------- subscribers (newsletter / daily-lunch opt-ins) ----------
 create table if not exists subscribers (
@@ -81,14 +106,20 @@ alter table promotions       enable row level security;
 alter table daily_special    enable row level security;
 
 -- helper: drop a policy if it exists, then create
+-- NOTE: 'orders' is intentionally excluded — it holds customer PII and every
+-- read/write goes through lib/ordersStore.js with the service-role key, which
+-- bypasses RLS entirely. No code path ever needs the anon key on this table.
 do $$
 declare t text;
 begin
-  foreach t in array array['registered_users','menu_items','orders','subscribers','promotions','daily_special']
+  foreach t in array array['registered_users','menu_items','subscribers','promotions','daily_special']
   loop
     execute format('drop policy if exists "anon_all_%1$s" on %1$s;', t);
     execute format('create policy "anon_all_%1$s" on %1$s for all using (true) with check (true);', t);
   end loop;
+  -- Orders previously had a permissive anon policy from an earlier version of
+  -- this file — drop it if present so existing installs pick up the fix too.
+  execute 'drop policy if exists "anon_all_orders" on orders;';
 end $$;
 
 -- ============================================================

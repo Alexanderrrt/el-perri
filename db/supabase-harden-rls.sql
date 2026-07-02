@@ -41,18 +41,19 @@
 -- ============================================================
 
 -- Make sure RLS is on (no-op if already enabled)
-alter table registered_users enable row level security;
-alter table menu_items       enable row level security;
-alter table orders           enable row level security;
-alter table subscribers      enable row level security;
-alter table promotions       enable row level security;
-alter table daily_special    enable row level security;
+alter table registered_users  enable row level security;
+alter table menu_items        enable row level security;
+alter table orders            enable row level security;
+alter table subscribers       enable row level security;
+alter table promotions        enable row level security;
+alter table daily_special     enable row level security;
+alter table whatsapp_sessions enable row level security;
 
 -- Drop the old wide-open policies
 do $$
 declare t text;
 begin
-  foreach t in array array['registered_users','menu_items','orders','subscribers','promotions','daily_special']
+  foreach t in array array['registered_users','menu_items','orders','subscribers','promotions','daily_special','whatsapp_sessions']
   loop
     execute format('drop policy if exists "anon_all_%1$s" on %1$s;', t);
   end loop;
@@ -81,8 +82,11 @@ drop policy if exists "public_insert_subscribers" on subscribers;
 create policy "public_insert_subscribers" on subscribers
   for insert to anon with check (true);
 
--- registered_users and orders: NO public policies at all => anon fully denied.
--- All access happens server-side with the service_role key (which bypasses RLS).
+-- registered_users, orders and whatsapp_sessions: NO public policies at all
+-- => anon fully denied. All access happens server-side with the service_role
+-- key (which bypasses RLS). orders/whatsapp_sessions never had a code path
+-- using the anon key in the first place — see db/supabase-schema.sql, which
+-- now creates both tables without an anon_all_* policy from the start.
 
 -- ============================================================
 -- After running: verify in Supabase → Auth → Policies that the only anon
