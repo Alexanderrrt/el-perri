@@ -32,7 +32,10 @@ export const SITE = {
   hours: [
     ["Lun–Dom", "12pm – 11pm"],
   ],
-  // Paste your ordering platform URL here when ready (DoorDash, Uber Eats, etc.):
+  // Paste your ordering platform URL here and every "Ordenar" CTA switches to it
+  // (WhatsApp is the fallback until then). The business already takes payments
+  // with Square: their free Square Online ordering page URL goes here
+  // (Square Dashboard → Online → your site URL, e.g. https://el-perri.square.site).
   ORDER_URL: "",
 };
 

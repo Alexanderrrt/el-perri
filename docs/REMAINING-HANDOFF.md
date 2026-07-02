@@ -67,6 +67,14 @@ Vercel project dashboard.
 - Swap remaining raw `<img>` (Nav/Footer/OrderAssistant) to `next/image`; adopt `next/font`.
 
 ## New since the audit (ordering funnel)
+- **Square online ordering (recommended next step):** the business already uses
+  Square for payments, so they can publish a free Square Online ordering page
+  (Square Dashboard → Online), and paste its URL into `ORDER_URL` in
+  `app/site.config.js`. Every "Ordenar" CTA then goes straight to Square
+  checkout — real cards, their existing account, no new fees beyond Square's
+  processing. WhatsApp stays as the fallback and the site-wide chat bubble.
+  A deeper in-site checkout (Square Web Payments SDK on `/checkout`) is
+  possible later but needs their Square developer credentials.
 - Orders and catering quotes now flow through **WhatsApp** (`SITE.whatsapp` in
   `app/site.config.js` — currently the business phone). If the business number
   isn't on WhatsApp, either register it with WhatsApp Business or set the field
