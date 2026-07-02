@@ -142,12 +142,14 @@ export default function Home() {
               <h2 className="h2">Un sueño que sigue creciendo</h2>
             </div>
             <div className="video-wrap">
+              {/* preload="none" + no autoplay: keeps the ~9MB clip off the
+                  critical path — it only downloads when the visitor hits play */}
               <video
                 className="video"
                 src={VIDEO.src}
                 poster={VIDEO.poster}
                 aria-label="Video de El Perri Latin Food"
-                autoPlay
+                preload="none"
                 muted
                 loop
                 playsInline
