@@ -13,10 +13,18 @@ export default function WelcomeBubble() {
   const [message, setMessage] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
+  // Remember dismissal so the prompt does not reappear on every visit.
+  const closeWelcome = () => {
+    if (typeof window !== "undefined") localStorage.setItem("lunchPromptDismissed", "1");
+    setShowWelcome(false);
+  };
+
   useEffect(() => {
-    // Check if user is logged in
+    // Hide if the visitor is logged in or already dismissed/subscribed.
     const userAuth = sessionStorage.getItem("userAuth");
-    if (userAuth) {
+    const dismissed =
+      typeof window !== "undefined" && localStorage.getItem("lunchPromptDismissed");
+    if (userAuth || dismissed) {
       setShowWelcome(false);
     }
   }, []);
@@ -34,6 +42,7 @@ export default function WelcomeBubble() {
 
     try {
       await subscribeDailyLunch(lunchData);
+      if (typeof window !== "undefined") localStorage.setItem("lunchPromptDismissed", "1");
       setLunchDone(true);
     } catch (error) {
       setMessage(error.message);
@@ -94,7 +103,7 @@ export default function WelcomeBubble() {
     <div className="welcome-overlay">
       <div className="welcome-bubble">
         <div className="flag-bar" aria-hidden="true"><span /><span /><span /></div>
-        <button className="close-btn" onClick={() => setShowWelcome(false)}>✕</button>
+        <button className="close-btn" onClick={closeWelcome}>✕</button>
 
         {mode === "lunch" && !lunchDone && (
           <div className="welcome-content">
@@ -125,14 +134,7 @@ export default function WelcomeBubble() {
               </button>
             </form>
 
-            <div className="welcome-secondary">
-              <span>¿Prefieres una cuenta?</span>
-              <button className="link-btn" onClick={() => { setMessage(""); setMode("signup"); }}>Crear cuenta</button>
-              <span>·</span>
-              <button className="link-btn" onClick={() => { setMessage(""); setMode("login"); }}>Iniciar sesión</button>
-            </div>
-
-            <button className="btn-skip" onClick={() => setShowWelcome(false)}>
+            <button className="btn-skip" onClick={closeWelcome}>
               Ahora no, gracias
             </button>
           </div>
@@ -143,7 +145,7 @@ export default function WelcomeBubble() {
             <div className="welcome-icon">✅</div>
             <h2>¡Listo, {lunchData.name || "parcero"}!</h2>
             <p>Desde mañana te llega el <strong>almuerzo del día</strong> a <strong>{lunchData.email}</strong>. ¡Buen provecho! 🇨🇴</p>
-            <button className="btn-subscribe" onClick={() => setShowWelcome(false)}>Cerrar</button>
+            <button className="btn-subscribe" onClick={closeWelcome}>Cerrar</button>
           </div>
         )}
 

@@ -1,0 +1,46 @@
+name: DB Backup
+
+# Daily logical backup of the Supabase Postgres database.
+# Requires repo secret SUPABASE_DB_URL (Supabase → Project Settings →
+# Database → Connection string → URI, the session/pooler connection).
+# The dump is uploaded as a GitHub artifact with 30-day retention — no
+# external object storage needed.
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # daily 08:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  pg_dump:
+    name: pg_dump -> artifact
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install postgresql-client (v16)
+        run: |
+          sudo sh -c 'echo "deb https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client-16
+
+      - name: Dump database
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -z "$SUPABASE_DB_URL" ]; then
+            echo "::error::SUPABASE_DB_URL secret is not set — add it in repo Settings → Secrets."
+            exit 1
+          fi
+          STAMP=$(date -u +%Y%m%d-%H%M%S)
+          pg_dump "$SUPABASE_DB_URL" --no-owner --no-privileges -F c -f "el-perri-$STAMP.dump"
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+
+      - name: Upload dump artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ env.STAMP }}
+          path: el-perri-*.dump
+          retention-days: 30

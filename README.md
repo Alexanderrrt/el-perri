@@ -1,50 +1,69 @@
-# El Restaurante El Perri — website
+# El Perri Latin Food — website
 
-Next.js (App Router) site for a Colombian restaurant in San José, CA.
-Mobile-first, no UI dependencies, all styling in `app/globals.css`.
+Next.js (App Router) site for a Colombian restaurant in San José, CA, with an
+admin panel for menu management and a daily "almuerzo del día" email.
+
+**Stack:** Next.js 16 (App Router) · Supabase (Postgres + Realtime) · Resend
+(email) · Vercel (hosting + cron).
 
 ## Run it
+
 ```bash
 npm install
-npm run dev      # http://localhost:3000
+cp .env.example .env.local   # fill in your own values — see below
+npm run dev                  # http://localhost:3000
 ```
 
+## Scripts
+
+| Command | What it does |
+|---|---|
+| `npm run dev` | Local dev server |
+| `npm run build` | Production build |
+| `npm run lint` | ESLint |
+| `npm test` | Jest |
+| `npm run verify` | lint + test + build — run before every commit |
+| `npm run db:migrate <file>` | Apply a `.sql` file to `PG_URL` |
+
 ## Pages
-- `/`           Home — intro, featured plates, Order Now
-- `/menu`       Full menu grouped by category
-- `/catering`   Catering pitch + inquiry form (opens email; wire to a backend later)
-- `/historia`   The story / about
 
-## Edit everything in ONE place
+- `/` — Home: intro, featured dishes, gallery, Instagram reels
+- `/menu` — Full menu (live from Supabase)
+- `/catering` — Catering inquiry
+- `/nuestra-historia` — About / story
+- `/checkout` — Guest checkout
+- `/admin/login`, `/admin/dashboard` — Admin panel (menu + daily lunch email),
+  gated by a signed session cookie — see `proxy.ts`
+
+## Edit site content in ONE place
+
 Open **`app/site.config.js`**:
-- `SITE.ORDER_URL`  → paste your ordering link (Toast/Square/etc.). Empty = button shows "pronto".
-- `SITE.phone / address / hours / email` → your real details (replace the [brackets]).
-- `IMAGES`          → put photos in `/public`, then set e.g. `hero: "/hero.jpg"`.
-- `MENU_GROUPS`     → dishes, prices, descriptions.
-- `FEATURED`        → which 3 dishes show on the home page.
+- `SITE.ORDER_URL` — paste your ordering link (Toast/Square/etc.) when ready
+- `SITE.phone / address / hours / email` — business details
+- `IMAGES` / `GALLERY` / `VIDEO` — photos and video live in `/public`
+- `REELS` — Instagram post permalinks featured on the home page
+- `MENU_GROUPS` — fallback menu data (the live site reads from Supabase; see
+  `db/supabase-schema.sql`)
 
-Photo slots show a gradient placeholder until you add real images, so the
-layout always looks finished.
+## Environment variables
 
-## Notes
-- Catering form currently opens the visitor's email client pre-filled.
-  When you have a host with a backend, swap `handleSubmit` for a POST to your API.
-- For best image performance later, switch `<img>` in `Slot` to `next/image`.
+See **`.env.example`** for the full list with descriptions (Supabase, Resend,
+admin credentials, cron secret). Never commit `.env.local`.
 
-## Design system (ui-ux-pro-max)
+## Project structure
 
-This build follows the ui-ux-pro-max skill's recommendations for a restaurant:
+```
+app/            Routes, components, site.config.js
+lib/            Supabase clients, auth, email, validation, rate limiting
+db/             Supabase schema + RLS policies (source of truth for the DB)
+scripts/        One-off ops scripts (migrations, backups)
+docs/           Active runbooks — see docs/README.md
+docs/archive/   Historical planning/status docs, kept for reference only
+assets/         Raw media not served by the site (photos, reports)
+__tests__/      Jest tests
+```
 
-- **Style:** Vibrant & Block-based — bold color, generous section gaps, block cards.
-- **Type:** Playfair Display SC (small-caps serif headings) + Karla (body) — the
-  skill's "Restaurant Menu" pairing. Loaded via Google Fonts in `app/layout.jsx`.
-- **Color tokens** (in `:root` of `globals.css`): primary `#dc2626`, accent `#a16207`,
-  background `#fef2f2`, foreground `#450a0a`. Everything references tokens — change
-  the brand by editing `:root` only.
-- **Accessibility:** all text combinations verified ≥4.5:1 WCAG AA (muted text and
-  red-on-light text were darkened to pass). Focus rings use the ring token. Touch
-  targets ≥44px. `prefers-reduced-motion` respected.
-- **Motion:** interaction transitions 200–250ms; card hover lift; scroll reveals 350ms.
+## More docs
 
-The Colombian tricolor stripe on the hero is an intentional cultural cue kept on top
-of the generated palette.
+- [docs/README.md](docs/README.md) — what's in `docs/`
+- [CLAUDE.md](CLAUDE.md) — branching, commit, and safety rules for this repo

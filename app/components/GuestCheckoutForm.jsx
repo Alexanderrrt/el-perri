@@ -38,7 +38,7 @@ export function GuestCheckoutForm({ onSubmit, isLoading }) {
     }
 
     try {
-      const res = await fetch(`/api/admin/promotions?code=${encodeURIComponent(formData.promo_code)}`);
+      const res = await fetch(`/api/promotions?code=${encodeURIComponent(formData.promo_code)}`);
       if (!res.ok) {
         setError("Invalid or expired promo code");
         setPromoApplied(null);

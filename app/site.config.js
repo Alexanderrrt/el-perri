@@ -17,7 +17,11 @@ export const SITE = {
   email: "elperrilatinfood.com",
   address: ["🚚 Food Truck: 1358 S Winchester Blvd", "📍 Local: 960 S First St, San Jose, CA 95110"],
   mapUrl: "https://maps.google.com/?q=960+S+First+St,+San+Jose,+CA+95110",
-  website: "https://elperrilatinfood.com",
+  // Canonical site URL — drives metadataBase, robots.txt and sitemap.xml.
+  // Points at the live Vercel deployment. Switch back to the brand domain
+  // (https://elperrilatinfood.com) ONLY once that domain is wired to Vercel,
+  // otherwise crawlers are sent to a host that doesn't run this app.
+  website: "https://elperrilatinfood.vercel.app",
   social: {
     instagram: "https://www.instagram.com/elperri.food/",
   },
