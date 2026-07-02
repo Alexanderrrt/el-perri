@@ -1,20 +1,23 @@
-import { SITE } from "../site.config";
+import { SITE, waLink } from "../site.config";
 
+/**
+ * OrderButton — the site's primary "Ordenar" CTA.
+ * Destination priority: ORDER_URL (Toast/DoorDash/etc.) → WhatsApp chat
+ * with a prefilled order message → plain phone call. Always actionable.
+ */
 export function OrderButton({ variant = "primary" }) {
-  const hasUrl = Boolean(SITE.ORDER_URL);
   const className = variant === "nav" ? "btn btn-nav" : "btn btn-primary";
-
-  if (hasUrl) {
-    return (
-      <a href={SITE.ORDER_URL} className={className} target="_blank" rel="noopener noreferrer">
-        Ordenar ahora
-      </a>
-    );
-  }
+  const wa = waLink("Hola El Perri 👋 Quiero hacer un pedido.");
+  const href = SITE.ORDER_URL || wa || SITE.phoneHref;
+  const external = Boolean(SITE.ORDER_URL || wa);
 
   return (
-    <a href="#order" className={className}>
-      Ordenar <span className="soon">Próximamente</span>
+    <a
+      href={href}
+      className={className}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+    >
+      Ordenar ahora
     </a>
   );
 }

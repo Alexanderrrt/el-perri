@@ -14,7 +14,11 @@ export const SITE = {
   city: "San José, CA",
   phone: "(408) 582-2502",
   phoneHref: "tel:+14085822502",
-  email: "elperrilatinfood.com",
+  // WhatsApp number in international format, digits only. Orders and catering
+  // quotes open a prefilled chat here. Set to "" to fall back to phone calls.
+  whatsapp: "14085822502",
+  // Business email — set when there is a real inbox (footer shows the domain until then).
+  email: "",
   address: ["🚚 Food Truck: 1358 S Winchester Blvd", "📍 Local: 960 S First St, San Jose, CA 95110"],
   mapUrl: "https://maps.google.com/?q=960+S+First+St,+San+Jose,+CA+95110",
   // Canonical site URL — drives metadataBase, robots.txt and sitemap.xml.
@@ -31,6 +35,15 @@ export const SITE = {
   // Paste your ordering platform URL here when ready (DoorDash, Uber Eats, etc.):
   ORDER_URL: "",
 };
+
+/**
+ * Build a WhatsApp deep link with a prefilled message.
+ * Returns null when SITE.whatsapp is unset so callers can fall back to phone.
+ */
+export function waLink(message) {
+  if (!SITE.whatsapp) return null;
+  return `https://wa.me/${SITE.whatsapp}?text=${encodeURIComponent(message)}`;
+}
 
 export const IMAGES = {
   hero: "/banner.jpg",

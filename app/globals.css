@@ -590,6 +590,54 @@ h1, h2, h3, .brand, .hero-title, .h1, .h2 { font-family: var(--font-display); }
 .link-accent:hover { color: #ffc93b; }
 .admin-dashboard-page { min-height: 100vh; background: var(--color-background); }
 
+/* ---------- WHATSAPP FAB ---------- */
+.wa-fab {
+  position: fixed; left: 18px; bottom: calc(18px + env(safe-area-inset-bottom)); z-index: 100;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 54px; height: 54px; border-radius: 50%;
+  background: #25d366; color: #fff;
+  box-shadow: 0 14px 30px -8px rgba(37,211,102,.6);
+  transition: transform .3s var(--ease), filter .3s var(--ease);
+}
+.wa-fab:hover { transform: translateY(-2px); filter: brightness(1.06); }
+.wa-fab svg { width: 28px; height: 28px; }
+
+/* ---------- MENU ROW ORDER CTA ---------- */
+.row-cta { display: flex; flex-direction: column; align-items: flex-end; gap: 7px; }
+.row-order {
+  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--color-primary-text); text-decoration: none; white-space: nowrap;
+  border: 1px solid currentColor; border-radius: 999px; padding: 3px 12px;
+  transition: background .25s var(--ease), color .25s var(--ease), border-color .25s var(--ease);
+}
+.row-order:hover { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+/* ---------- ORDER CONFIRMATION ---------- */
+.order-id { font-variant-numeric: tabular-nums; color: var(--color-primary-text); }
+
+/* ---------- CATERING FORM (light theme — page sits on cream) ---------- */
+.cat-form { display: flex; flex-direction: column; gap: 16px; margin-top: 8px; }
+.cat-form__grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.cat-form__field { display: flex; flex-direction: column; gap: 6px; }
+.cat-form__field--full { grid-column: 1 / -1; }
+.cat-form__field label { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.cat-form__field input,
+.cat-form__field select,
+.cat-form__field textarea {
+  padding: 12px 14px; border-radius: var(--r-sm); border: 1px solid var(--color-border);
+  background: var(--color-surface); color: var(--ink); font-size: 15px; font-family: var(--font-body);
+  transition: border-color .25s var(--ease), box-shadow .25s var(--ease);
+}
+.cat-form__field textarea { resize: vertical; min-height: 90px; }
+.cat-form__field input:focus, .cat-form__field select:focus, .cat-form__field textarea:focus {
+  outline: 0; border-color: var(--amber); box-shadow: 0 0 0 3px rgba(245,179,1,.2);
+}
+.cat-form__error { background: rgba(224,31,38,.08); border: 1px solid rgba(224,31,38,.25); border-radius: var(--r-sm); padding: 12px 14px; color: var(--color-primary-text); font-size: 14px; font-weight: 600; }
+.cat-form__success { background: rgba(37,211,102,.1); border: 1px solid rgba(37,211,102,.35); border-radius: var(--r-sm); padding: 14px 16px; color: #14713d; font-size: 15px; font-weight: 600; }
+@media (max-width: 560px) {
+  .cat-form__grid { grid-template-columns: 1fr; }
+}
+
 /* ---------- FOCUS / MOTION ---------- */
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: 3px solid var(--color-ring); outline-offset: 2px; border-radius: 6px;

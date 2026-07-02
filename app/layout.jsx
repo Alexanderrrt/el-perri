@@ -1,6 +1,6 @@
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { Nav, Footer, OrderAssistant } from "./components";
+import { Nav, Footer, OrderAssistant, WhatsAppButton } from "./components";
 import { SITE, IMAGES } from "./site.config";
 import "./globals.css";
 
@@ -81,6 +81,7 @@ export default function RootLayout({ children }) {
         {children}
         <Footer />
         <OrderAssistant />
+        <WhatsAppButton />
         <Analytics />
         <SpeedInsights />
       </body>
