@@ -9,9 +9,15 @@ dashboard, DNS registrar, billing, or third-party accounts. Ordered by priority.
 including `subscribers` emails and `registered_users`. Passwords are now bcrypt
 hashes (fixed in code), but emails are still exposed.
 
-**Blocker:** the admin panel and lunch features currently **write** via the anon
-key from the browser. Locking RLS will break them unless those writes move to
-server-side routes using the service-role key. So do this in order:
+**Update:** `orders` and `whatsapp_sessions` are already fully hardened —
+`db/supabase-schema.sql` creates both with no anon policy at all, since
+`lib/ordersStore.js` and `lib/whatsappSession.js` only ever use the
+service-role key. Nothing further needed for those two tables.
+
+**Blocker (for the rest):** the admin panel and lunch features currently
+**write** via the anon key from the browser. Locking RLS will break them
+unless those writes move to server-side routes using the service-role key.
+So do this in order:
 
 1. Add **`SUPABASE_SERVICE_ROLE_KEY`** in Vercel (Supabase → Settings → API →
    `service_role` key). `lib/supabaseAdmin.js` and `/api/admin/export` already
@@ -85,9 +91,9 @@ Vercel project dashboard.
      José) with your accountant.
   Without these env vars set, checkout still works as "pay at pickup" —
   useful for demos, but **not real payments** until Square is configured.
-- Orders are **not yet written to a database** — `/api/checkout/guest` logs
-  and emails each order but there's no `orders` table read/write yet. Add
-  that once the Supabase RLS work above lands (order #1 in this doc).
+- ~~Orders are not yet written to a database~~ — **done**: both the web
+  checkout and the WhatsApp bot write to the real `orders` table via
+  `lib/ordersStore.js`; see the Órdenes Activas admin tab.
 - Orders and catering quotes also flow through **WhatsApp** (`SITE.whatsapp`
   in `app/site.config.js` — currently the business phone) as a no-setup
   fallback and for items with non-numeric prices ("$17 / $18", "+$2") that
@@ -95,3 +101,50 @@ Vercel project dashboard.
   register it with WhatsApp Business or set the field to `""`.
 - Catering leads email to **`CATERING_EMAIL`** (set in Vercel alongside
   `RESEND_API_KEY`); until configured the form falls back to WhatsApp.
+
+## New: AI ordering bot on WhatsApp + Órdenes Activas
+A customer can now text the business WhatsApp number, hold a real conversation
+in Spanish, and place an order — it lands directly in the admin dashboard's
+new **🛵 Órdenes Activas** tab alongside web orders. The AI (DeepSeek) never
+computes prices or invents menu items itself: it calls named tools
+(`agregar_item`, `establecer_entrega`, `confirmar_pedido`, etc.), and the
+server executes them against the real menu and the same pricing logic the web
+checkout uses (`lib/orderPricing.js`). Fully built and ready — needs two
+external accounts to actually receive/send WhatsApp messages:
+
+**1. DeepSeek API key**
+1. platform.deepseek.com → API keys → create one.
+2. Set **`DEEPSEEK_API_KEY`** in Vercel (and `.env.local` for local testing).
+   Paste it directly into the env file/dashboard — never into a chat
+   conversation with an AI assistant, since that can leak it into logs.
+
+**2. Meta WhatsApp Business Cloud API** (the official API — different from the
+regular WhatsApp Business app already used for the site's click-to-chat links)
+1. developer.facebook.com → My Apps → **Create App** → type "Business" → add
+   the **WhatsApp** product.
+2. Meta gives you a **temporary access token** and a **test phone number**
+   immediately (free) — enough to fully test the bot before using your real
+   business number. Note the **Phone Number ID** shown on that page.
+3. App Settings → Basic → copy the **App Secret**.
+4. Make up a random string for **`WHATSAPP_VERIFY_TOKEN`** (anything — you
+   choose it, Meta just echoes it back once to prove you own the endpoint).
+5. Set in Vercel: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
+   `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` (see `.env.example`).
+6. Deploy (the webhook needs a public HTTPS URL — `localhost` won't work
+   without a tunnel like ngrok for local testing).
+7. Meta app dashboard → WhatsApp → Configuration → **Webhook**: URL =
+   `https://<your-domain>/api/whatsapp/webhook`, verify token = whatever you
+   set above → **Verify and save** → subscribe to the **messages** field.
+8. While testing, set **`WHATSAPP_ALLOWLIST`** to your own number so only you
+   get bot replies; remove it when ready to go live to real customers.
+9. Send "Hola" from the allowlisted number to the test number shown in step 2
+   — you should get a reply, and a confirmed order should appear in
+   Órdenes Activas.
+10. When ready for production: WhatsApp → API Setup → add and verify the real
+    business phone number, generate a **permanent** access token (temporary
+    ones expire in 24h), and swap `WHATSAPP_PHONE_NUMBER_ID` +
+    `WHATSAPP_ACCESS_TOKEN` to the production values.
+
+**Cost note:** each customer message can trigger a few DeepSeek API calls
+(tool-calling loop, capped at 4 per message) — inexpensive at DeepSeek's
+pricing, but it is a paid key with real usage once live.

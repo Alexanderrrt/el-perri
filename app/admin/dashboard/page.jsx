@@ -7,13 +7,24 @@ import { isSupabaseConfigured } from "@/lib/supabase";
 /**
  * AdminDashboard — production admin panel for El Perri.
  *
- * Two responsibilities only:
- *   1. Menú      — create / edit / delete menu items (synced live to the site via Supabase).
- *   2. Almuerzo  — set the daily lunch special, manage subscribers, send the email now.
+ * Three responsibilities:
+ *   1. Menú           — create / edit / delete menu items (synced live to the site via Supabase).
+ *   2. Almuerzo       — set the daily lunch special, manage subscribers, send the email now.
+ *   3. Órdenes Activas — web + WhatsApp AI bot orders, advance/cancel status.
  *
  * Access is gated server-side by proxy.ts (signed admin_session cookie); this
  * component additionally redirects to /admin/login if the local session is missing.
  */
+const ORDER_STATUS_FLOW = { pendiente: "preparando", preparando: "listo", listo: "entregado" };
+const ORDER_STATUS_LABEL = {
+  pendiente: "Pendiente",
+  preparando: "Preparando",
+  listo: "Listo",
+  entregado: "Entregado",
+  cancelado: "Cancelado",
+};
+const ORDERS_POLL_MS = 15000;
+
 export default function AdminDashboard() {
   const [admin, setAdmin] = useState(null);
   const [activeTab, setActiveTab] = useState("menu");
@@ -28,6 +39,9 @@ export default function AdminDashboard() {
   const [lunchSubs, setLunchSubs] = useState([]);
   const [savingLunch, setSavingLunch] = useState(false);
   const [sendingLunch, setSendingLunch] = useState(false);
+
+  const [orders, setOrders] = useState([]);
+  const [showAllOrders, setShowAllOrders] = useState(false);
 
   useEffect(() => {
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
@@ -45,6 +59,60 @@ export default function AdminDashboard() {
       return () => unsubMenu();
     }
   }, []);
+
+  // ── Órdenes Activas ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (activeTab !== "orders") return;
+    refreshOrders();
+    const interval = setInterval(refreshOrders, ORDERS_POLL_MS);
+    return () => clearInterval(interval);
+  }, [activeTab, showAllOrders]);
+
+  const refreshOrders = async () => {
+    try {
+      const res = await fetch(`/api/admin/orders${showAllOrders ? "?all=1" : ""}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Error al cargar pedidos");
+      setOrders(data.orders);
+    } catch (err) {
+      notify("No se pudieron cargar los pedidos: " + err.message, "error");
+    }
+  };
+
+  const advanceOrder = async (order) => {
+    const nextStatus = ORDER_STATUS_FLOW[order.status];
+    if (!nextStatus) return;
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: order.id, status: nextStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Error al actualizar");
+      notify(`✓ Pedido ${order.order_number || order.id} → ${ORDER_STATUS_LABEL[nextStatus]}`, "success");
+      await refreshOrders();
+    } catch (err) {
+      notify("No se pudo actualizar el pedido: " + err.message, "error");
+    }
+  };
+
+  const cancelOrder = async (order) => {
+    if (typeof window !== "undefined" && !window.confirm(`¿Cancelar el pedido ${order.order_number || order.id}?`)) return;
+    try {
+      const res = await fetch("/api/admin/orders", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: order.id, status: "cancelado" }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Error al cancelar");
+      notify(`Pedido ${order.order_number || order.id} cancelado`, "success");
+      await refreshOrders();
+    } catch (err) {
+      notify("No se pudo cancelar: " + err.message, "error");
+    }
+  };
 
   const notify = (message, type = "success") => {
     setNotification({ message, type });
@@ -212,6 +280,7 @@ export default function AdminDashboard() {
       <div className="admin-tabs">
         <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
         <button className={`tab-btn ${activeTab === "lunch" ? "active" : ""}`} onClick={() => setActiveTab("lunch")}>🍽️ Almuerzo del día</button>
+        <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>🛵 Órdenes Activas</button>
       </div>
 
       <main className="admin-main">
@@ -312,6 +381,66 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+
+        {activeTab === "orders" && (
+          <div>
+            <div className="section-header">
+              <h2>Órdenes Activas</h2>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <label className="toggle-label">
+                  <input type="checkbox" checked={showAllOrders} onChange={(e) => setShowAllOrders(e.target.checked)} />
+                  Mostrar completadas/canceladas
+                </label>
+                <button className="btn btn-small" onClick={refreshOrders}>🔄 Actualizar</button>
+              </div>
+            </div>
+            <p className="hint-text">
+              Pedidos del sitio web y del asistente de WhatsApp. Se actualiza solo cada 15 segundos.
+            </p>
+
+            {orders.length === 0 ? (
+              <p className="empty-state">
+                {showAllOrders ? "Aún no hay pedidos." : "No hay pedidos activos en este momento."}
+              </p>
+            ) : (
+              <div className="orders-grid">
+                {orders.map((order) => (
+                  <div key={order.id} className={`order-card status-${order.status}`}>
+                    <div className="order-card-head">
+                      <strong>{order.order_number || order.id}</strong>
+                      <span className={`source-badge source-${order.source}`}>
+                        {order.source === "whatsapp" ? "💬 WhatsApp" : "🌐 Web"}
+                      </span>
+                    </div>
+                    <p className="order-status-badge">{ORDER_STATUS_LABEL[order.status] || order.status}</p>
+                    <p className="customer">{order.customer || "Cliente sin nombre"}</p>
+                    {order.phone && <p className="small"><a href={`tel:${order.phone}`}>{order.phone}</a></p>}
+                    <ul className="order-items">
+                      {(order.items || []).map((item, i) => (
+                        <li key={i}>{item.quantity}x {item.name}</li>
+                      ))}
+                    </ul>
+                    <p className="small">
+                      {order.fulfillment === "domicilio" ? `Domicilio — ${order.address || "sin dirección"}` : "Recoger en el local"}
+                    </p>
+                    <p className="price">${Number(order.total).toFixed(2)} {order.paid && "· pagado"}</p>
+                    <p className="small">{order.created_at ? new Date(order.created_at).toLocaleString() : ""}</p>
+                    <div className="actions">
+                      {ORDER_STATUS_FLOW[order.status] && (
+                        <button className="btn btn-small" onClick={() => advanceOrder(order)}>
+                          → {ORDER_STATUS_LABEL[ORDER_STATUS_FLOW[order.status]]}
+                        </button>
+                      )}
+                      {order.status !== "entregado" && order.status !== "cancelado" && (
+                        <button className="btn btn-small btn-danger" onClick={() => cancelOrder(order)}>Cancelar</button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </main>
 
       <style jsx>{`
@@ -372,6 +501,20 @@ export default function AdminDashboard() {
         .live-badge { font-size: 0.7rem; color: #4caf50; vertical-align: middle; margin-left: 0.5rem; animation: pulse 2s infinite; }
         .hint-text { color: rgba(255,255,255,0.55); font-size: 0.85rem; margin: -1rem 0 1.5rem 0; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+        .toggle-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: rgba(255,255,255,0.7); cursor: pointer; }
+        .orders-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 1.5rem; }
+        .order-card { background: #1a1a1a; border: 1px solid rgba(255,215,0,0.2); border-radius: 8px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.35rem; border-left: 4px solid rgba(255,215,0,0.4); }
+        .order-card.status-cancelado { opacity: 0.5; }
+        .order-card.status-entregado { border-left-color: #4caf50; }
+        .order-card-head { display: flex; justify-content: space-between; align-items: center; }
+        .order-card-head strong { color: #ffd700; font-size: 1.05rem; }
+        .source-badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 999px; background: rgba(255,255,255,0.08); white-space: nowrap; }
+        .source-whatsapp { background: rgba(37,211,102,0.18); color: #6ee7a8; }
+        .order-status-badge { display: inline-block; width: fit-content; font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #ffd700; margin: 0; }
+        .customer { font-weight: 600; margin: 0; }
+        .order-items { margin: 0.25rem 0; padding-left: 1.1rem; color: rgba(255,255,255,0.75); font-size: 0.9rem; }
+        .order-card .price { margin: 0.2rem 0; }
+        .order-card a { color: #ffd700; }
       `}</style>
     </div>
   );

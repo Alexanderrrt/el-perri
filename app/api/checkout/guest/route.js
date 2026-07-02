@@ -23,9 +23,8 @@ import { logAudit } from "@/lib/audit";
 import { validateCSRFToken } from "@/lib/csrf";
 import { applyCORSHeaders, handleCORSPreflight } from "@/lib/cors";
 import { createCheckoutLimiter, checkAndRespond } from "@/lib/rateLimit";
-import { listMenuItems } from "@/lib/menuStore";
-import { parsePrice } from "@/lib/price";
-import { findActivePromo } from "@/lib/promotionsStore";
+import { recomputeOrder, makeOrderNumber } from "@/lib/orderPricing";
+import { createOrder } from "@/lib/ordersStore";
 import { isSquareConfigured, createSquarePayment } from "@/lib/square";
 import { SITE } from "@/app/site.config";
 import {
@@ -38,38 +37,6 @@ const checkoutLimiter = createCheckoutLimiter();
 
 export async function OPTIONS(request) {
   return handleCORSPreflight(request.headers.get("origin"));
-}
-
-/** Recompute the order total from the live menu — never trust the client. */
-async function recomputeTotal(items, discountCode) {
-  const menu = await listMenuItems();
-  const byId = new Map(menu.map((m) => [m.id, m]));
-
-  const lines = [];
-  for (const { id, name, quantity } of items) {
-    const menuItem = byId.get(id);
-    if (!menuItem) return { error: `Item no disponible: ${name || id}` };
-    const price = parsePrice(menuItem.price);
-    if (price == null) return { error: `${menuItem.name} no está disponible para pedir en línea` };
-    lines.push({ id, name: menuItem.name, price, quantity });
-  }
-
-  const subtotal = lines.reduce((sum, l) => sum + l.price * l.quantity, 0);
-
-  let discount = 0;
-  let promo = null;
-  if (discountCode) {
-    promo = await findActivePromo(discountCode);
-    if (promo) {
-      discount = promo.type === "fixed" ? promo.discount : subtotal * (promo.discount / 100);
-    }
-  }
-
-  const taxable = Math.max(0, subtotal - discount);
-  const tax = taxable * (SITE.TAX_RATE || 0);
-  const total = Math.round((taxable + tax) * 100) / 100;
-
-  return { lines, subtotal, discount, promo, tax, total };
 }
 
 export async function POST(request) {
@@ -108,7 +75,7 @@ export async function POST(request) {
       );
     }
 
-    const computed = await recomputeTotal(items, discount_code);
+    const computed = await recomputeOrder(items, discount_code);
     if (computed.error) {
       return applyCORSHeaders(Response.json({ error: computed.error }, { status: 400 }), origin);
     }
@@ -123,9 +90,7 @@ export async function POST(request) {
     }
 
     const orderId = uuidv4();
-    const orderNumber = `ORD-${new Date().toISOString().slice(0, 10).replace(/-/g, "")}-${String(
-      Math.floor(Math.random() * 10000)
-    ).padStart(4, "0")}`;
+    const orderNumber = makeOrderNumber();
 
     let paid = false;
     if (isSquareConfigured) {
@@ -148,9 +113,18 @@ export async function POST(request) {
       paid = true;
     }
 
-    // Order persistence to a real `orders` table is a follow-up (see
-    // docs/REMAINING-HANDOFF.md) — this mirrors the existing mock pattern.
-    console.log(`[ORDER] ${orderNumber} — ${email} — $${computed.total} — paid=${paid}`);
+    await createOrder({
+      orderNumber,
+      customer: null,
+      email,
+      phone,
+      address: fulfillment === "delivery" ? delivery_address : null,
+      items: computed.lines,
+      total: computed.total,
+      fulfillment: fulfillment === "delivery" ? "domicilio" : "recoger",
+      source: "web",
+      paid,
+    });
 
     await logAudit({
       entityType: "order",
