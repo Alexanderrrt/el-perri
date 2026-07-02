@@ -10,12 +10,15 @@ const PAGE_CSP = [
   "default-src 'self'",
   // 'unsafe-eval' is added only in dev so Next.js HMR/debug tooling works;
   // production gets the stricter policy without it.
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  `script-src 'self' 'unsafe-inline' https://www.instagram.com${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "media-src 'self' https:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.instagram.com",
+  // Instagram's official embed.js renders each post inside an iframe from
+  // instagram.com/cdninstagram.com — required for the homepage reels section.
+  "frame-src https://www.instagram.com https://*.cdninstagram.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
