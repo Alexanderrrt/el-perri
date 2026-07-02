@@ -89,11 +89,17 @@ Vercel project dashboard.
      expiry/CVV) before flipping to production credentials.
   4. Confirm the `TAX_RATE` in `app/site.config.js` (currently 9.375% for San
      José) with your accountant.
+  5. **Apple Pay** (already built into `/checkout`): in the Square Developer
+     Console → your app → **Apple Pay** → **Add Domain** (do it in both
+     **Sandbox** and **Production** modes). Square auto-handles Apple's domain
+     validation — no Apple merchant ID or `.well-known` file needed. The Apple
+     Pay button only appears on Apple devices in Safari over HTTPS (not on
+     `localhost`), and charges through the same Square path as the card.
   Without these env vars set, checkout still works as "pay at pickup" —
   useful for demos, but **not real payments** until Square is configured.
-- ~~Orders are not yet written to a database~~ — **done**: both the web
-  checkout and the WhatsApp bot write to the real `orders` table via
-  `lib/ordersStore.js`; see the Órdenes Activas admin tab.
+- ~~Orders are not yet written to a database~~ — **done**: the web checkout
+  writes to the real `orders` table via `lib/ordersStore.js`; see the
+  Órdenes Activas admin tab.
 - Orders and catering quotes also flow through **WhatsApp** (`SITE.whatsapp`
   in `app/site.config.js` — currently the business phone) as a no-setup
   fallback and for items with non-numeric prices ("$17 / $18", "+$2") that
@@ -102,19 +108,19 @@ Vercel project dashboard.
 - Catering leads email to **`CATERING_EMAIL`** (set in Vercel alongside
   `RESEND_API_KEY`); until configured the form falls back to WhatsApp.
 
-## New: AI ordering bot on WhatsApp + Órdenes Activas
-A customer can now text the business WhatsApp number, hold a real conversation
-in Spanish, and place an order — it lands directly in the admin dashboard's
-new **🛵 Órdenes Activas** tab alongside web orders. The AI (DeepSeek) never
-computes prices or invents menu items itself: it calls named tools
-(`agregar_item`, `establecer_entrega`, `confirmar_pedido`, etc.), and the
-server executes them against the real menu and the same pricing logic the web
-checkout uses (`lib/orderPricing.js`). Fully built and ready — needs two
-external accounts to actually receive/send WhatsApp messages:
+## New: AI ordering assistant in the on-site chat
+The site's **"¿Qué pido?"** chat bubble is now a real AI assistant. It answers
+menu questions in Spanish and builds the cart by calling server-side tools
+(`agregar_item`, `quitar_item`, `set_cantidad`) — the server validates every
+item against the live menu and shared pricing (`lib/orderPricing.js`), so it
+can't invent dishes or prices. When the cart has items, the chat shows a
+**"Ver mi pedido y pagar"** button that hands off to `/checkout` (card / Apple
+Pay via Square). WhatsApp stays as a click-to-chat "reach us" link.
 
-**1. AI model API key (Groq free tier)**
-The bot talks to any OpenAI-compatible LLM endpoint with function-calling.
-Default is **Groq's free tier** — fast (~1–3s replies) and no credit card.
+> The earlier Meta WhatsApp Cloud API bot was **cancelled** — no Meta app,
+> webhook, phone-number registration, or `WHATSAPP_*` API env vars needed.
+
+**Only setup needed — the AI model API key (Groq free tier):**
 1. console.groq.com → sign in → **API Keys** → **Create API Key** (starts `gsk_`).
 2. Set in Vercel:
    - **`LLM_API_KEY`** = your `gsk_…` key
@@ -124,36 +130,8 @@ Paste the key directly into the dashboard/env file — never into a chat with an
 AI assistant, since that can leak it into logs. Free-tier limits (~1,000
 requests/day) are plenty for a food truck. To switch providers later, just
 change those three vars — no code change (DeepSeek: `sk-…` +
-`https://api.deepseek.com` + `deepseek-chat`; NVIDIA works too but its free
-tier is too slow — ~50s/reply — for live chat).
+`https://api.deepseek.com` + `deepseek-chat`).
 
-**2. Meta WhatsApp Business Cloud API** (the official API — different from the
-regular WhatsApp Business app already used for the site's click-to-chat links)
-1. developer.facebook.com → My Apps → **Create App** → type "Business" → add
-   the **WhatsApp** product.
-2. Meta gives you a **temporary access token** and a **test phone number**
-   immediately (free) — enough to fully test the bot before using your real
-   business number. Note the **Phone Number ID** shown on that page.
-3. App Settings → Basic → copy the **App Secret**.
-4. Make up a random string for **`WHATSAPP_VERIFY_TOKEN`** (anything — you
-   choose it, Meta just echoes it back once to prove you own the endpoint).
-5. Set in Vercel: `WHATSAPP_ACCESS_TOKEN`, `WHATSAPP_PHONE_NUMBER_ID`,
-   `WHATSAPP_APP_SECRET`, `WHATSAPP_VERIFY_TOKEN` (see `.env.example`).
-6. Deploy (the webhook needs a public HTTPS URL — `localhost` won't work
-   without a tunnel like ngrok for local testing).
-7. Meta app dashboard → WhatsApp → Configuration → **Webhook**: URL =
-   `https://<your-domain>/api/whatsapp/webhook`, verify token = whatever you
-   set above → **Verify and save** → subscribe to the **messages** field.
-8. While testing, set **`WHATSAPP_ALLOWLIST`** to your own number so only you
-   get bot replies; remove it when ready to go live to real customers.
-9. Send "Hola" from the allowlisted number to the test number shown in step 2
-   — you should get a reply, and a confirmed order should appear in
-   Órdenes Activas.
-10. When ready for production: WhatsApp → API Setup → add and verify the real
-    business phone number, generate a **permanent** access token (temporary
-    ones expire in 24h), and swap `WHATSAPP_PHONE_NUMBER_ID` +
-    `WHATSAPP_ACCESS_TOKEN` to the production values.
-
-**Cost note:** each customer message can trigger a few DeepSeek API calls
-(tool-calling loop, capped at 4 per message) — inexpensive at DeepSeek's
-pricing, but it is a paid key with real usage once live.
+**Cost note:** each customer message can trigger a few LLM calls (tool-calling
+loop, capped at 4 per message) — free on Groq's tier, but usage-metered if you
+move to a paid provider. `/api/assistant` is rate-limited to 40 msgs/hour/IP.
