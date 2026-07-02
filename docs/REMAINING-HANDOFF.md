@@ -112,11 +112,18 @@ server executes them against the real menu and the same pricing logic the web
 checkout uses (`lib/orderPricing.js`). Fully built and ready — needs two
 external accounts to actually receive/send WhatsApp messages:
 
-**1. DeepSeek API key**
-1. platform.deepseek.com → API keys → create one.
-2. Set **`DEEPSEEK_API_KEY`** in Vercel (and `.env.local` for local testing).
-   Paste it directly into the env file/dashboard — never into a chat
-   conversation with an AI assistant, since that can leak it into logs.
+**1. DeepSeek API key (via NVIDIA)**
+This project runs DeepSeek through **NVIDIA's** OpenAI-compatible gateway
+(key starts with `nvapi-`, from build.nvidia.com). Set in Vercel:
+   - **`DEEPSEEK_API_KEY`** = your `nvapi-…` key
+   - **`DEEPSEEK_BASE_URL`** = `https://integrate.api.nvidia.com/v1`
+   - **`DEEPSEEK_MODEL`** = `deepseek-ai/deepseek-v4-pro` (supports the
+     tool-calling the bot needs; override with a faster/cheaper variant here
+     without any code change)
+Paste the key directly into the dashboard/env file — never into a chat with an
+AI assistant, since that can leak it into logs. (To switch to DeepSeek's own
+API later: key `sk-…`, `DEEPSEEK_BASE_URL=https://api.deepseek.com`, model
+`deepseek-chat` — see `.env.example`.)
 
 **2. Meta WhatsApp Business Cloud API** (the official API — different from the
 regular WhatsApp Business app already used for the site's click-to-chat links)
