@@ -10,14 +10,17 @@ const PAGE_CSP = [
   "default-src 'self'",
   // 'unsafe-eval' is added only in dev so Next.js HMR/debug tooling works;
   // production gets the stricter policy without it.
-  // Square's Web Payments SDK (checkout card field) loads from *.squarecdn.com.
-  `script-src 'self' 'unsafe-inline' https://www.instagram.com https://*.squarecdn.com${isDev ? " 'unsafe-eval'" : ""}`,
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  // Square's Web Payments SDK (checkout card field) loads from *.squarecdn.com
+  // and spins up its tokenization worker via a same-origin blob: script.
+  `script-src 'self' 'unsafe-inline' blob: https://www.instagram.com https://*.squarecdn.com${isDev ? " 'unsafe-eval'" : ""}`,
+  // card-wrapper.css is fetched from squarecdn for the card field's styling.
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.squarecdn.com",
   "font-src 'self' https://fonts.gstatic.com https://*.squarecdn.com data:",
   "img-src 'self' data: blob: https:",
   "media-src 'self' https:",
-  // connect-src covers the SDK's own PCI-scoped tokenization calls.
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.instagram.com https://pci-connect.squareup.com https://pci-connect.squareupsandbox.com",
+  // connect-src covers the SDK's own PCI-scoped tokenization calls, plus the
+  // Sentry endpoint the SDK itself reports errors to.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.instagram.com https://pci-connect.squareup.com https://pci-connect.squareupsandbox.com https://*.ingest.sentry.io",
   // Instagram's official embed.js renders each post inside an iframe from
   // instagram.com/cdninstagram.com — required for the homepage reels section.
   // Square's card field also renders inside a same-origin-locked iframe.
