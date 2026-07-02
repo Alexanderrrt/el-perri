@@ -22,11 +22,10 @@ function computeTotals(items, promo) {
 
 /**
  * CheckoutClient — cart summary, contact/fulfillment details, promo code,
- * and payment. When NEXT_PUBLIC_SQUARE_APP_ID is set, Square's Web Payments
- * SDK renders a PCI-compliant card field and tokenizes the card in the
- * browser; the token (never the card number) is sent to our API, which
- * charges it server-side. Without Square configured, checkout proceeds as
- * "pay at pickup".
+ * and payment. When Square is configured, its Web Payments SDK renders a
+ * PCI-compliant card field AND (on Apple devices/Safari) an Apple Pay button;
+ * both tokenize in the browser and the token — never card data — is charged
+ * server-side. Without Square configured, checkout proceeds as "pay at pickup".
  */
 export function CheckoutClient() {
   const [items, setItems] = useState([]);
@@ -42,7 +41,10 @@ export function CheckoutClient() {
   const [submitting, setSubmitting] = useState(false);
   const [card, setCard] = useState(null);
   const [cardReady, setCardReady] = useState(false);
+  const [paymentsReady, setPaymentsReady] = useState(false);
+  const [applePay, setApplePay] = useState(null);
   const cardContainerRef = useRef(null);
+  const paymentsRef = useRef(null);
 
   const squareAppId = process.env.NEXT_PUBLIC_SQUARE_APP_ID;
   const squareLocationId = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID;
@@ -58,12 +60,14 @@ export function CheckoutClient() {
     return unsubscribe;
   }, []);
 
-  // Load Square's Web Payments SDK and attach the card field once.
+  const totals = computeTotals(items, promo);
+
+  // Load Square's Web Payments SDK, keep the payments instance, attach the card.
   useEffect(() => {
-    if (!squareEnabled || card) return;
+    if (!squareEnabled || paymentsRef.current) return;
     let cancelled = false;
 
-    async function attachCard() {
+    async function init() {
       if (!window.Square) {
         await new Promise((resolve, reject) => {
           const script = document.createElement("script");
@@ -75,6 +79,8 @@ export function CheckoutClient() {
       }
       if (cancelled || !window.Square) return;
       const payments = window.Square.payments(squareAppId, squareLocationId);
+      paymentsRef.current = payments;
+      setPaymentsReady(true);
       const cardInstance = await payments.card();
       if (cancelled) return;
       await cardInstance.attach(cardContainerRef.current);
@@ -82,7 +88,7 @@ export function CheckoutClient() {
       setCardReady(true);
     }
 
-    attachCard().catch((err) => {
+    init().catch((err) => {
       console.error("[SQUARE] SDK load failed:", err);
       setError("No pudimos cargar el formulario de pago. Intenta de nuevo o llámanos.");
     });
@@ -90,7 +96,34 @@ export function CheckoutClient() {
     return () => {
       cancelled = true;
     };
-  }, [squareEnabled, squareAppId, squareLocationId, card]);
+  }, [squareEnabled, squareAppId, squareLocationId]);
+
+  // (Re)initialize Apple Pay whenever the total changes. Square throws on
+  // unsupported browsers (non-Safari / no Apple device) — we just skip the
+  // button in that case. Apple Pay only works over HTTPS on a registered domain.
+  useEffect(() => {
+    if (!squareEnabled || !paymentsReady || totals.total <= 0) return;
+    let cancelled = false;
+
+    async function initApplePay() {
+      try {
+        const paymentRequest = paymentsRef.current.paymentRequest({
+          countryCode: "US",
+          currencyCode: "USD",
+          total: { amount: totals.total.toFixed(2), label: SITE.shortName || "El Perri" },
+        });
+        const ap = await paymentsRef.current.applePay(paymentRequest);
+        if (!cancelled) setApplePay(ap);
+      } catch {
+        if (!cancelled) setApplePay(null); // unsupported browser/device
+      }
+    }
+
+    initApplePay();
+    return () => {
+      cancelled = true;
+    };
+  }, [squareEnabled, paymentsReady, totals.total]);
 
   const validatePromo = async () => {
     setPromoError("");
@@ -109,39 +142,19 @@ export function CheckoutClient() {
     }
   };
 
-  const totals = computeTotals(items, promo);
+  /** Shared validation for both the card form and the Apple Pay button. */
+  const validate = () => {
+    if (items.length === 0) return "Tu carrito está vacío.";
+    if (!email.trim()) return "Escribe tu correo.";
+    if (!phone.trim()) return "Escribe tu teléfono.";
+    if (fulfillment === "delivery" && address.trim().length < 5) return "Escribe una dirección de entrega válida.";
+    return null;
+  };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError("");
-
-    if (items.length === 0) {
-      setError("Tu carrito está vacío.");
-      return;
-    }
-    if (fulfillment === "delivery" && address.trim().length < 5) {
-      setError("Escribe una dirección de entrega válida.");
-      return;
-    }
-
+  /** Send the order to the server (payment already tokenized, or undefined for pay-at-pickup). */
+  const submitOrder = async (payment_token) => {
     setSubmitting(true);
     try {
-      let payment_token;
-      if (squareEnabled) {
-        if (!card) {
-          setError("El formulario de pago aún está cargando.");
-          setSubmitting(false);
-          return;
-        }
-        const result = await card.tokenize();
-        if (result.status !== "OK") {
-          setError("Revisa los datos de tu tarjeta.");
-          setSubmitting(false);
-          return;
-        }
-        payment_token = result.token;
-      }
-
       const res = await fetch("/api/checkout/guest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -159,18 +172,45 @@ export function CheckoutClient() {
         }),
       });
       const data = await res.json();
-
       if (!res.ok) {
         setError(data.error || "No pudimos procesar tu pedido.");
         setSubmitting(false);
         return;
       }
-
       clearCart();
       window.location.href = `/order-confirmation/${data.orderNumber}`;
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
       setSubmitting(false);
+    }
+  };
+
+  const handleCardSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    const v = validate();
+    if (v) return setError(v);
+
+    let payment_token;
+    if (squareEnabled) {
+      if (!card) return setError("El formulario de pago aún está cargando.");
+      const result = await card.tokenize();
+      if (result.status !== "OK") return setError("Revisa los datos de tu tarjeta.");
+      payment_token = result.token;
+    }
+    submitOrder(payment_token);
+  };
+
+  const handleApplePay = async () => {
+    setError("");
+    const v = validate();
+    if (v) return setError(v);
+    try {
+      const result = await applePay.tokenize();
+      if (result.status !== "OK") return; // customer cancelled the sheet
+      submitOrder(result.token);
+    } catch {
+      setError("No se pudo completar el pago con Apple Pay.");
     }
   };
 
@@ -184,7 +224,7 @@ export function CheckoutClient() {
   }
 
   return (
-    <form className="checkout-layout" onSubmit={handleSubmit}>
+    <form className="checkout-layout" onSubmit={handleCardSubmit}>
       <div className="checkout-cart">
         <h2 className="h2" style={{ fontSize: 22 }}>Tu pedido</h2>
         {items.map((item) => (
@@ -257,6 +297,18 @@ export function CheckoutClient() {
         <div className="checkout-payment">
           {squareEnabled ? (
             <>
+              {applePay && (
+                <>
+                  <button
+                    type="button"
+                    className="apple-pay-button"
+                    onClick={handleApplePay}
+                    disabled={submitting}
+                    aria-label="Pagar con Apple Pay"
+                  />
+                  <div className="checkout-or"><span>o paga con tarjeta</span></div>
+                </>
+              )}
               <label>Tarjeta</label>
               <div id="card-container" ref={cardContainerRef} className="square-card-container" />
               {!cardReady && <p className="form-note">Cargando el formulario de pago…</p>}
