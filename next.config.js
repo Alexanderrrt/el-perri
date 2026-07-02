@@ -10,15 +10,18 @@ const PAGE_CSP = [
   "default-src 'self'",
   // 'unsafe-eval' is added only in dev so Next.js HMR/debug tooling works;
   // production gets the stricter policy without it.
-  `script-src 'self' 'unsafe-inline' https://www.instagram.com${isDev ? " 'unsafe-eval'" : ""}`,
+  // Square's Web Payments SDK (checkout card field) loads from *.squarecdn.com.
+  `script-src 'self' 'unsafe-inline' https://www.instagram.com https://*.squarecdn.com${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src 'self' https://fonts.gstatic.com data:",
+  "font-src 'self' https://fonts.gstatic.com https://*.squarecdn.com data:",
   "img-src 'self' data: blob: https:",
   "media-src 'self' https:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.instagram.com",
+  // connect-src covers the SDK's own PCI-scoped tokenization calls.
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://www.instagram.com https://pci-connect.squareup.com https://pci-connect.squareupsandbox.com",
   // Instagram's official embed.js renders each post inside an iframe from
   // instagram.com/cdninstagram.com — required for the homepage reels section.
-  "frame-src https://www.instagram.com https://*.cdninstagram.com",
+  // Square's card field also renders inside a same-origin-locked iframe.
+  "frame-src https://www.instagram.com https://*.cdninstagram.com https://*.squarecdn.com https://*.squareup.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
