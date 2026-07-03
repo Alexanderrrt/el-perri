@@ -62,6 +62,7 @@ export async function POST(request) {
       phone,
       fulfillment,
       delivery_address,
+      delivery_notes,
       marketing_consent,
       items,
       total: clientTotal,
@@ -136,6 +137,7 @@ export async function POST(request) {
         customerName,
         customerPhone: phone,
         dropoffAddress: delivery_address,
+        dropoffNotes: delivery_notes || "",
         items: computed.lines,
         total: computed.total,
       });
