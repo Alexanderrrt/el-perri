@@ -2,6 +2,8 @@
 import { useEffect, useRef, useState } from "react";
 import { SITE, waLink } from "../site.config";
 import { getCart, subscribeToCart, setQty, clearCart, cartSubtotal } from "@/lib/cart";
+import { useAuth } from "@/lib/useAuth";
+import { isSupabaseConfigured } from "@/lib/supabase";
 
 const SQUARE_SDK_SRC =
   process.env.NEXT_PUBLIC_SQUARE_ENVIRONMENT === "production"
@@ -20,15 +22,24 @@ function computeTotals(items, promo) {
   return { subtotal, discount, tax, total };
 }
 
+const GOOGLE_SVG = (
+  <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+    <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+    <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+    <path fill="#FBBC05" d="M10.53 28.59a14.5 14.5 0 0 1 0-9.18l-7.98-6.19a24.08 24.08 0 0 0 0 21.56l7.98-6.19z"/>
+    <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+  </svg>
+);
+
 /**
  * CheckoutClient — cart summary, contact/fulfillment details, promo code,
- * and payment. When Square is configured, its Web Payments SDK renders a
- * PCI-compliant card field AND (on Apple devices/Safari) an Apple Pay button;
- * both tokenize in the browser and the token — never card data — is charged
- * server-side. Without Square configured, checkout proceeds as "pay at pickup".
+ * and payment. Supports Google sign-in via Supabase Auth to auto-fill
+ * customer info. Square Web Payments SDK handles card + Apple Pay.
  */
 export function CheckoutClient() {
+  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth();
   const [items, setItems] = useState([]);
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [fulfillment, setFulfillment] = useState("pickup");
@@ -45,6 +56,7 @@ export function CheckoutClient() {
   const [applePay, setApplePay] = useState(null);
   const cardContainerRef = useRef(null);
   const paymentsRef = useRef(null);
+  const authFilled = useRef(false);
 
   const squareAppId = process.env.NEXT_PUBLIC_SQUARE_APP_ID;
   const squareLocationId = process.env.NEXT_PUBLIC_SQUARE_LOCATION_ID;
@@ -59,6 +71,19 @@ export function CheckoutClient() {
       .catch(() => {});
     return unsubscribe;
   }, []);
+
+  // Auto-fill form fields from Google profile (only once per sign-in).
+  useEffect(() => {
+    if (!user || authFilled.current) return;
+    authFilled.current = true;
+    if (user.name && !name) setName(user.name);
+    if (user.email && !email) setEmail(user.email);
+  }, [user, name, email]);
+
+  // Reset the fill guard when user signs out.
+  useEffect(() => {
+    if (!user) authFilled.current = false;
+  }, [user]);
 
   const totals = computeTotals(items, promo);
 
@@ -98,9 +123,6 @@ export function CheckoutClient() {
     };
   }, [squareEnabled, squareAppId, squareLocationId]);
 
-  // (Re)initialize Apple Pay whenever the total changes. Square throws on
-  // unsupported browsers (non-Safari / no Apple device) — we just skip the
-  // button in that case. Apple Pay only works over HTTPS on a registered domain.
   useEffect(() => {
     if (!squareEnabled || !paymentsReady || totals.total <= 0) return;
     let cancelled = false;
@@ -115,7 +137,7 @@ export function CheckoutClient() {
         const ap = await paymentsRef.current.applePay(paymentRequest);
         if (!cancelled) setApplePay(ap);
       } catch {
-        if (!cancelled) setApplePay(null); // unsupported browser/device
+        if (!cancelled) setApplePay(null);
       }
     }
 
@@ -142,16 +164,15 @@ export function CheckoutClient() {
     }
   };
 
-  /** Shared validation for both the card form and the Apple Pay button. */
   const validate = () => {
     if (items.length === 0) return "Tu carrito está vacío.";
+    if (!name.trim()) return "Escribe tu nombre.";
     if (!email.trim()) return "Escribe tu correo.";
     if (!phone.trim()) return "Escribe tu teléfono.";
     if (fulfillment === "delivery" && address.trim().length < 5) return "Escribe una dirección de entrega válida.";
     return null;
   };
 
-  /** Send the order to the server (payment already tokenized, or undefined for pay-at-pickup). */
   const submitOrder = async (payment_token) => {
     setSubmitting(true);
     try {
@@ -159,6 +180,7 @@ export function CheckoutClient() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          name,
           email,
           phone,
           fulfillment,
@@ -169,6 +191,7 @@ export function CheckoutClient() {
           discount_code: promo?.code || null,
           payment_token,
           csrfToken,
+          auth_user_id: user?.id || null,
         }),
       });
       const data = await res.json();
@@ -207,7 +230,7 @@ export function CheckoutClient() {
     if (v) return setError(v);
     try {
       const result = await applePay.tokenize();
-      if (result.status !== "OK") return; // customer cancelled the sheet
+      if (result.status !== "OK") return;
       submitOrder(result.token);
     } catch {
       setError("No se pudo completar el pago con Apple Pay.");
@@ -234,7 +257,7 @@ export function CheckoutClient() {
               <span className="checkout-line__price">${(item.price * item.qty).toFixed(2)}</span>
             </div>
             <div className="qty-stepper">
-              <button type="button" onClick={() => setQty(item.id, item.qty - 1)} aria-label="Quitar uno">−</button>
+              <button type="button" onClick={() => setQty(item.id, item.qty - 1)} aria-label="Quitar uno">-</button>
               <span>{item.qty}</span>
               <button type="button" onClick={() => setQty(item.id, item.qty + 1)} aria-label="Agregar uno">+</button>
             </div>
@@ -259,7 +282,7 @@ export function CheckoutClient() {
         <div className="checkout-totals">
           <div><span>Subtotal</span><span>${totals.subtotal.toFixed(2)}</span></div>
           {totals.discount > 0 && (
-            <div><span>Descuento</span><span>−${totals.discount.toFixed(2)}</span></div>
+            <div><span>Descuento</span><span>-${totals.discount.toFixed(2)}</span></div>
           )}
           <div><span>Impuesto</span><span>${totals.tax.toFixed(2)}</span></div>
           <div className="checkout-totals__total"><span>Total</span><span>${totals.total.toFixed(2)}</span></div>
@@ -269,6 +292,32 @@ export function CheckoutClient() {
       <div className="checkout-details">
         <h2 className="h2" style={{ fontSize: 22 }}>Tus datos</h2>
 
+        {/* Google sign-in — auto-fills name + email */}
+        {isSupabaseConfigured && !authLoading && (
+          <div className="checkout-auth">
+            {user ? (
+              <div className="checkout-auth__user">
+                {user.avatar_url && (
+                  <img src={user.avatar_url} alt="" className="checkout-auth__avatar" referrerPolicy="no-referrer" />
+                )}
+                <span className="checkout-auth__name">{user.name || user.email}</span>
+                <button type="button" className="checkout-auth__signout" onClick={signOut}>
+                  Cerrar sesión
+                </button>
+              </div>
+            ) : (
+              <button type="button" className="btn-google" onClick={signInWithGoogle}>
+                {GOOGLE_SVG}
+                <span>Continuar con Google</span>
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="cat-form__field">
+          <label htmlFor="co-name">Nombre *</label>
+          <input id="co-name" type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Tu nombre" />
+        </div>
         <div className="cat-form__field">
           <label htmlFor="co-email">Correo *</label>
           <input id="co-email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="tu@correo.com" />
@@ -311,7 +360,7 @@ export function CheckoutClient() {
               )}
               <label>Tarjeta</label>
               <div id="card-container" ref={cardContainerRef} className="square-card-container" />
-              {!cardReady && <p className="form-note">Cargando el formulario de pago…</p>}
+              {!cardReady && <p className="form-note">Cargando el formulario de pago...</p>}
             </>
           ) : (
             <p className="cat-form__success">
@@ -323,7 +372,7 @@ export function CheckoutClient() {
         {error && <p className="cat-form__error">{error}</p>}
 
         <button type="submit" className="btn btn-primary btn-large" disabled={submitting || (squareEnabled && !cardReady)}>
-          {submitting ? "Procesando…" : squareEnabled ? `Pagar $${totals.total.toFixed(2)}` : "Confirmar pedido"}
+          {submitting ? "Procesando..." : squareEnabled ? `Pagar $${totals.total.toFixed(2)}` : "Confirmar pedido"}
         </button>
 
         {SITE.whatsapp && (
