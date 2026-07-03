@@ -56,6 +56,7 @@ export async function POST(request) {
     }
 
     const {
+      name: customerName,
       email,
       phone,
       fulfillment,
@@ -66,6 +67,7 @@ export async function POST(request) {
       discount_code,
       payment_token,
       csrfToken,
+      auth_user_id,
     } = validation.data;
 
     if (!validateCSRFToken(csrfToken)) {
@@ -115,7 +117,7 @@ export async function POST(request) {
 
     await createOrder({
       orderNumber,
-      customer: null,
+      customer: customerName,
       email,
       phone,
       address: fulfillment === "delivery" ? delivery_address : null,

@@ -16,7 +16,7 @@ const PAGE_CSP = [
   // card-wrapper.css is fetched from squarecdn for the card field's styling.
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://*.squarecdn.com",
   "font-src 'self' https://fonts.gstatic.com https://*.squarecdn.com data:",
-  "img-src 'self' data: blob: https:",
+  "img-src 'self' data: blob: https: https://*.googleusercontent.com",
   "media-src 'self' https:",
   // connect-src covers the SDK's own PCI-scoped tokenization calls, plus the
   // Sentry endpoint the SDK itself reports errors to.
@@ -24,7 +24,7 @@ const PAGE_CSP = [
   // Instagram's official embed.js renders each post inside an iframe from
   // instagram.com/cdninstagram.com — required for the homepage reels section.
   // Square's card field also renders inside a same-origin-locked iframe.
-  "frame-src https://www.instagram.com https://*.cdninstagram.com https://*.squarecdn.com https://*.squareup.com",
+  "frame-src https://www.instagram.com https://*.cdninstagram.com https://*.squarecdn.com https://*.squareup.com https://accounts.google.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
