@@ -5,13 +5,9 @@ export const metadata = {
   robots: { index: false },
 };
 
-/**
- * OrderConfirmation — thank-you page after guest checkout.
- * Shows the order number and how the customer will be contacted;
- * offers WhatsApp/phone in case of questions.
- */
-export default async function OrderConfirmation({ params }) {
+export default async function OrderConfirmation({ params, searchParams }) {
   const { orderId } = await params;
+  const { tracking } = await searchParams;
   const wa = waLink(`Hola El Perri 👋 Tengo una pregunta sobre mi pedido #${orderId}.`);
 
   return (
@@ -21,10 +17,28 @@ export default async function OrderConfirmation({ params }) {
         <p className="kicker">¡Gracias!</p>
         <h1 className="h1">Pedido<br />recibido. ✅</h1>
         <p className="lead">
-          Tu número de pedido es <strong className="order-id">#{orderId}</strong>. Te contactamos
-          para confirmar el tiempo de entrega. Si tienes dudas, escríbenos y te respondemos al
-          instante.
+          Tu número de pedido es <strong className="order-id">#{orderId}</strong>.
+          {tracking
+            ? " Un repartidor va en camino — sigue tu pedido en tiempo real."
+            : " Te contactamos para confirmar el tiempo de entrega."
+          }
+          {" "}Si tienes dudas, escríbenos y te respondemos al instante.
         </p>
+
+        {tracking && (
+          <div style={{ marginTop: 20, marginBottom: 8 }}>
+            <a
+              href={tracking}
+              className="btn btn-primary"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ fontSize: 18, padding: "14px 32px" }}
+            >
+              📍 Rastrear mi pedido
+            </a>
+          </div>
+        )}
+
         <div className="section-actions" style={{ marginTop: 26 }}>
           {wa && (
             <a href={wa} className="btn btn-primary" target="_blank" rel="noopener noreferrer">

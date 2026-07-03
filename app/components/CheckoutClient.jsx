@@ -201,7 +201,10 @@ export function CheckoutClient() {
         return;
       }
       clearCart();
-      window.location.href = `/order-confirmation/${data.orderNumber}`;
+      const trackingParam = data.delivery?.trackingUrl
+        ? `?tracking=${encodeURIComponent(data.delivery.trackingUrl)}`
+        : "";
+      window.location.href = `/order-confirmation/${data.orderNumber}${trackingParam}`;
     } catch {
       setError("Error de conexión. Intenta de nuevo.");
       setSubmitting(false);
