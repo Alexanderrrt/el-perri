@@ -758,6 +758,14 @@ h1, h2, h3, .brand, .hero-title, .h1, .h2 { font-family: var(--font-display); }
   .checkout-layout { grid-template-columns: 1fr; }
 }
 
+/* ---------- LEGAL PAGES ---------- */
+.legal-page { max-width: 720px; margin-left: auto; margin-right: auto; }
+.legal-page h2 { margin-top: 32px; margin-bottom: 12px; }
+.legal-page ul { padding-left: 24px; margin: 0 0 16px; }
+.legal-page li { line-height: 1.7; margin-bottom: 6px; }
+.legal-page a { color: var(--rojo); text-decoration: underline; }
+.legal-page a:hover { color: var(--amber); }
+
 /* ---------- FOCUS / MOTION ---------- */
 a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible {
   outline: 3px solid var(--color-ring); outline-offset: 2px; border-radius: 6px;
