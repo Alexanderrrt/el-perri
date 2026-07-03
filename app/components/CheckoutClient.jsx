@@ -49,6 +49,9 @@ export function CheckoutClient() {
   const [state, setState] = useState("CA");
   const [zip, setZip] = useState("");
   const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [addressConfirmed, setAddressConfirmed] = useState(false);
+  const streetRef = useRef(null);
+  const autocompleteRef = useRef(null);
   const [promoCode, setPromoCode] = useState("");
   const [promo, setPromo] = useState(null);
   const [promoError, setPromoError] = useState("");
@@ -89,6 +92,71 @@ export function CheckoutClient() {
   useEffect(() => {
     if (!user) authFilled.current = false;
   }, [user]);
+
+  const googleMapsKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+
+  // Google Places Autocomplete for street address
+  useEffect(() => {
+    if (fulfillment !== "delivery" || !googleMapsKey || autocompleteRef.current) return;
+    let cancelled = false;
+
+    async function initAutocomplete() {
+      if (!window.google?.maps?.places) {
+        await new Promise((resolve, reject) => {
+          if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+            const check = setInterval(() => {
+              if (window.google?.maps?.places) { clearInterval(check); resolve(); }
+            }, 100);
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${googleMapsKey}&libraries=places`;
+          script.async = true;
+          script.onload = resolve;
+          script.onerror = reject;
+          document.head.appendChild(script);
+        });
+      }
+      if (cancelled || !streetRef.current) return;
+
+      const ac = new window.google.maps.places.Autocomplete(streetRef.current, {
+        componentRestrictions: { country: "us" },
+        types: ["address"],
+        fields: ["address_components", "formatted_address"],
+      });
+
+      ac.addListener("place_changed", () => {
+        const place = ac.getPlace();
+        if (!place.address_components) return;
+
+        let streetNum = "", route = "", acCity = "", acState = "", acZip = "";
+        for (const c of place.address_components) {
+          const t = c.types[0];
+          if (t === "street_number") streetNum = c.long_name;
+          if (t === "route") route = c.long_name;
+          if (t === "locality") acCity = c.long_name;
+          if (t === "administrative_area_level_1") acState = c.short_name;
+          if (t === "postal_code") acZip = c.long_name;
+        }
+
+        setStreet(`${streetNum} ${route}`.trim());
+        if (acCity) setCity(acCity);
+        if (acState) setState(acState);
+        if (acZip) setZip(acZip);
+        setAddressConfirmed(true);
+      });
+
+      autocompleteRef.current = ac;
+    }
+
+    initAutocomplete().catch(() => {});
+    return () => { cancelled = true; };
+  }, [fulfillment, googleMapsKey]);
+
+  // Reset confirmation when address changes manually
+  useEffect(() => {
+    setAddressConfirmed(false);
+  }, [street, city, state, zip]);
 
   const totals = computeTotals(items, promo);
 
@@ -361,11 +429,23 @@ export function CheckoutClient() {
           <div className="delivery-fields">
             <div className="cat-form__field">
               <label htmlFor="co-street">Dirección *</label>
-              <input id="co-street" type="text" required autoComplete="street-address" value={street} onChange={(e) => setStreet(e.target.value)} placeholder="1128 S 8th St" />
+              <input
+                id="co-street"
+                ref={streetRef}
+                type="text"
+                required
+                autoComplete={googleMapsKey ? "off" : "street-address"}
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+                placeholder="Escribe tu dirección..."
+              />
+              {!googleMapsKey && (
+                <span className="form-hint">Escribe la dirección completa</span>
+              )}
             </div>
             <div className="cat-form__field">
               <label htmlFor="co-apt">Apt / Suite / Unidad</label>
-              <input id="co-apt" type="text" autoComplete="address-line2" value={apt} onChange={(e) => setApt(e.target.value)} placeholder="Apt 4B" />
+              <input id="co-apt" type="text" autoComplete="address-line2" value={apt} onChange={(e) => setApt(e.target.value)} placeholder="Apt 4B (opcional)" />
             </div>
             <div className="delivery-fields__row">
               <div className="cat-form__field">
@@ -377,10 +457,26 @@ export function CheckoutClient() {
                 <input id="co-state" type="text" required autoComplete="address-level1" maxLength={2} value={state} onChange={(e) => setState(e.target.value.toUpperCase())} />
               </div>
               <div className="cat-form__field" style={{ maxWidth: 110 }}>
-                <label htmlFor="co-zip">Código postal *</label>
+                <label htmlFor="co-zip">ZIP *</label>
                 <input id="co-zip" type="text" required autoComplete="postal-code" inputMode="numeric" maxLength={5} value={zip} onChange={(e) => setZip(e.target.value.replace(/\D/g, ""))} placeholder="95112" />
               </div>
             </div>
+
+            {street && city && zip.length === 5 && (
+              <div className={`delivery-confirm ${addressConfirmed ? "delivery-confirm--ok" : ""}`}>
+                <span className="delivery-confirm__icon">{addressConfirmed ? "✅" : "📍"}</span>
+                <div className="delivery-confirm__text">
+                  <strong>{street}{apt ? `, ${apt}` : ""}</strong>
+                  <span>{city}, {state} {zip}</span>
+                </div>
+                {!addressConfirmed && (
+                  <button type="button" className="btn btn-small" onClick={() => setAddressConfirmed(true)}>
+                    Confirmar
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="cat-form__field">
               <label htmlFor="co-notes">Instrucciones de entrega</label>
               <textarea id="co-notes" rows={2} value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder="Ej: portón negro, tocar timbre, dejar en la puerta..." maxLength={300} />
