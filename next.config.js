@@ -81,7 +81,9 @@ const nextConfig = {
       },
       {
         // HTML pages: full security header set including a page-appropriate CSP.
-        source: "/:path*",
+        // Excludes /.well-known so Apple Pay domain verification gets no extra
+        // headers that could confuse Square's automated verifier.
+        source: "/((?!\\.well-known).*)",
         headers: [
           ...BASE_SECURITY_HEADERS,
           { key: "Content-Security-Policy", value: PAGE_CSP },
