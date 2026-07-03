@@ -758,6 +758,17 @@ h1, h2, h3, .brand, .hero-title, .h1, .h2 { font-family: var(--font-display); }
   .checkout-layout { grid-template-columns: 1fr; }
 }
 
+/* ---------- DELIVERY ADDRESS FIELDS ---------- */
+.delivery-fields { display: flex; flex-direction: column; gap: 2px; }
+.delivery-fields__row { display: flex; gap: 12px; }
+.delivery-fields__row .cat-form__field { flex: 1; }
+.delivery-fields textarea {
+  width: 100%; resize: vertical; min-height: 56px;
+  font: inherit; padding: 10px 14px; border: 1.5px solid var(--color-border);
+  border-radius: var(--r-sm); background: var(--color-surface); color: var(--ink);
+}
+.delivery-fields textarea:focus { border-color: var(--rojo); outline: none; }
+
 /* ---------- LEGAL PAGES ---------- */
 .legal-page { max-width: 720px; margin-left: auto; margin-right: auto; }
 .legal-page h2 { margin-top: 32px; margin-bottom: 12px; }

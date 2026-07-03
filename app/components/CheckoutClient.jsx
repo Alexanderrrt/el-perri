@@ -43,7 +43,12 @@ export function CheckoutClient() {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [fulfillment, setFulfillment] = useState("pickup");
-  const [address, setAddress] = useState("");
+  const [street, setStreet] = useState("");
+  const [apt, setApt] = useState("");
+  const [city, setCity] = useState("San Jose");
+  const [state, setState] = useState("CA");
+  const [zip, setZip] = useState("");
+  const [deliveryNotes, setDeliveryNotes] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [promo, setPromo] = useState(null);
   const [promoError, setPromoError] = useState("");
@@ -169,8 +174,20 @@ export function CheckoutClient() {
     if (!name.trim()) return "Escribe tu nombre.";
     if (!email.trim()) return "Escribe tu correo.";
     if (!phone.trim()) return "Escribe tu teléfono.";
-    if (fulfillment === "delivery" && address.trim().length < 5) return "Escribe una dirección de entrega válida.";
+    if (fulfillment === "delivery") {
+      if (!street.trim()) return "Escribe la dirección de entrega.";
+      if (!city.trim()) return "Escribe la ciudad.";
+      if (!state.trim()) return "Escribe el estado.";
+      if (!zip.trim() || !/^\d{5}$/.test(zip.trim())) return "Escribe un código postal válido (5 dígitos).";
+    }
     return null;
+  };
+
+  const fullAddress = () => {
+    const parts = [street.trim()];
+    if (apt.trim()) parts[0] += `, ${apt.trim()}`;
+    parts.push(`${city.trim()}, ${state.trim()} ${zip.trim()}`);
+    return parts.join(", ");
   };
 
   const submitOrder = async (payment_token) => {
@@ -184,7 +201,8 @@ export function CheckoutClient() {
           email,
           phone,
           fulfillment,
-          delivery_address: fulfillment === "delivery" ? address : "",
+          delivery_address: fulfillment === "delivery" ? fullAddress() : "",
+          delivery_notes: fulfillment === "delivery" ? deliveryNotes : "",
           marketing_consent: false,
           items: items.map((i) => ({ id: i.id, name: i.name, quantity: i.qty })),
           total: totals.total,
@@ -340,9 +358,33 @@ export function CheckoutClient() {
         </div>
 
         {fulfillment === "delivery" && (
-          <div className="cat-form__field">
-            <label htmlFor="co-address">Dirección de entrega *</label>
-            <input id="co-address" required value={address} onChange={(e) => setAddress(e.target.value)} placeholder="123 Main St, San Jose, CA" />
+          <div className="delivery-fields">
+            <div className="cat-form__field">
+              <label htmlFor="co-street">Dirección *</label>
+              <input id="co-street" type="text" required autoComplete="street-address" value={street} onChange={(e) => setStreet(e.target.value)} placeholder="1128 S 8th St" />
+            </div>
+            <div className="cat-form__field">
+              <label htmlFor="co-apt">Apt / Suite / Unidad</label>
+              <input id="co-apt" type="text" autoComplete="address-line2" value={apt} onChange={(e) => setApt(e.target.value)} placeholder="Apt 4B" />
+            </div>
+            <div className="delivery-fields__row">
+              <div className="cat-form__field">
+                <label htmlFor="co-city">Ciudad *</label>
+                <input id="co-city" type="text" required autoComplete="address-level2" value={city} onChange={(e) => setCity(e.target.value)} />
+              </div>
+              <div className="cat-form__field" style={{ maxWidth: 80 }}>
+                <label htmlFor="co-state">Estado *</label>
+                <input id="co-state" type="text" required autoComplete="address-level1" maxLength={2} value={state} onChange={(e) => setState(e.target.value.toUpperCase())} />
+              </div>
+              <div className="cat-form__field" style={{ maxWidth: 110 }}>
+                <label htmlFor="co-zip">Código postal *</label>
+                <input id="co-zip" type="text" required autoComplete="postal-code" inputMode="numeric" maxLength={5} value={zip} onChange={(e) => setZip(e.target.value.replace(/\D/g, ""))} placeholder="95112" />
+              </div>
+            </div>
+            <div className="cat-form__field">
+              <label htmlFor="co-notes">Instrucciones de entrega</label>
+              <textarea id="co-notes" rows={2} value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} placeholder="Ej: portón negro, tocar timbre, dejar en la puerta..." maxLength={300} />
+            </div>
           </div>
         )}
 
