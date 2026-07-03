@@ -434,7 +434,7 @@ export function CheckoutClient() {
                 ref={streetRef}
                 type="text"
                 required
-                autoComplete={googleMapsKey ? "off" : "street-address"}
+                autoComplete="off"
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
                 placeholder="Escribe tu dirección..."
