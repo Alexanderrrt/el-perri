@@ -426,7 +426,7 @@ export function CheckoutClient() {
         </div>
 
         {fulfillment === "delivery" && (
-          <div className="delivery-fields">
+          <div className="delivery-fields" autoComplete="off">
             <div className="cat-form__field">
               <label htmlFor="co-street">Dirección *</label>
               <input
@@ -434,7 +434,8 @@ export function CheckoutClient() {
                 ref={streetRef}
                 type="text"
                 required
-                autoComplete="off"
+                autoComplete="nope"
+                name="delivery-street"
                 value={street}
                 onChange={(e) => setStreet(e.target.value)}
                 placeholder="Escribe tu dirección..."
@@ -445,20 +446,20 @@ export function CheckoutClient() {
             </div>
             <div className="cat-form__field">
               <label htmlFor="co-apt">Apt / Suite / Unidad</label>
-              <input id="co-apt" type="text" autoComplete="address-line2" value={apt} onChange={(e) => setApt(e.target.value)} placeholder="Apt 4B (opcional)" />
+              <input id="co-apt" type="text" autoComplete="nope" name="delivery-apt" value={apt} onChange={(e) => setApt(e.target.value)} placeholder="Apt 4B (opcional)" />
             </div>
             <div className="delivery-fields__row">
               <div className="cat-form__field">
                 <label htmlFor="co-city">Ciudad *</label>
-                <input id="co-city" type="text" required autoComplete="address-level2" value={city} onChange={(e) => setCity(e.target.value)} />
+                <input id="co-city" type="text" required autoComplete="nope" name="delivery-city" value={city} onChange={(e) => setCity(e.target.value)} />
               </div>
               <div className="cat-form__field" style={{ maxWidth: 80 }}>
                 <label htmlFor="co-state">Estado *</label>
-                <input id="co-state" type="text" required autoComplete="address-level1" maxLength={2} value={state} onChange={(e) => setState(e.target.value.toUpperCase())} />
+                <input id="co-state" type="text" required autoComplete="nope" name="delivery-state" maxLength={2} value={state} onChange={(e) => setState(e.target.value.toUpperCase())} />
               </div>
               <div className="cat-form__field" style={{ maxWidth: 110 }}>
                 <label htmlFor="co-zip">ZIP *</label>
-                <input id="co-zip" type="text" required autoComplete="postal-code" inputMode="numeric" maxLength={5} value={zip} onChange={(e) => setZip(e.target.value.replace(/\D/g, ""))} placeholder="95112" />
+                <input id="co-zip" type="text" required autoComplete="nope" name="delivery-zip" inputMode="numeric" maxLength={5} value={zip} onChange={(e) => setZip(e.target.value.replace(/\D/g, ""))} placeholder="95112" />
               </div>
             </div>
 
