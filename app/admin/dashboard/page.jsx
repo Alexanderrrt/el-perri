@@ -43,6 +43,9 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [showAllOrders, setShowAllOrders] = useState(false);
 
+  const [uberEnv, setUberEnv] = useState("sandbox");
+  const [savingUberEnv, setSavingUberEnv] = useState(false);
+
   useEffect(() => {
     const authData = typeof window !== "undefined" ? sessionStorage.getItem("adminAuth") : null;
     if (!authData) {
@@ -52,6 +55,7 @@ export default function AdminDashboard() {
     setAdmin(JSON.parse(authData));
     refreshMenu();
     refreshLunch();
+    refreshSettings();
 
     // Real-time: menu edits on any device refresh this panel live.
     if (isSupabaseConfigured) {
@@ -241,6 +245,34 @@ export default function AdminDashboard() {
     }
   };
 
+  // ── Settings ─────────────────────────────────────────────────────────────
+  const refreshSettings = async () => {
+    try {
+      const res = await fetch("/api/admin/settings");
+      const data = await res.json();
+      if (data.success) setUberEnv(data.settings.uber_environment || "sandbox");
+    } catch {}
+  };
+
+  const toggleUberEnv = async (newEnv) => {
+    setSavingUberEnv(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "uber_environment", value: newEnv }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Error al guardar");
+      setUberEnv(newEnv);
+      notify(`Uber Direct cambiado a ${newEnv === "sandbox" ? "PRUEBAS (sandbox)" : "PRODUCCIÓN"}`, "success");
+    } catch (err) {
+      notify("No se pudo cambiar: " + err.message, "error");
+    } finally {
+      setSavingUberEnv(false);
+    }
+  };
+
   const exportLunchCSV = () => {
     if (lunchSubs.length === 0) { notify("No hay suscriptores para exportar", "error"); return; }
     const headers = ["Correo", "Nombre", "Registrado"];
@@ -281,6 +313,7 @@ export default function AdminDashboard() {
         <button className={`tab-btn ${activeTab === "menu" ? "active" : ""}`} onClick={() => setActiveTab("menu")}>📋 Menú</button>
         <button className={`tab-btn ${activeTab === "lunch" ? "active" : ""}`} onClick={() => setActiveTab("lunch")}>🍽️ Almuerzo del día</button>
         <button className={`tab-btn ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>🛵 Órdenes Activas</button>
+        <button className={`tab-btn ${activeTab === "settings" ? "active" : ""}`} onClick={() => setActiveTab("settings")}>⚙️ Configuración</button>
       </div>
 
       <main className="admin-main">
@@ -441,6 +474,46 @@ export default function AdminDashboard() {
             )}
           </div>
         )}
+
+        {activeTab === "settings" && (
+          <div>
+            <div className="section-header">
+              <h2>Configuración</h2>
+            </div>
+
+            <div className="form-section">
+              <h3 style={{ color: "#ffd700", margin: 0 }}>Uber Direct — Modo de entrega</h3>
+              <p className="hint-text" style={{ margin: 0 }}>
+                Cambia entre pruebas (sandbox) y producción. En modo sandbox, Uber no envía repartidores reales — ideal para probar sin cargos.
+              </p>
+              <div className="uber-env-toggle">
+                <button
+                  className={`uber-env-btn ${uberEnv === "sandbox" ? "uber-env-btn--active uber-env-btn--sandbox" : ""}`}
+                  onClick={() => toggleUberEnv("sandbox")}
+                  disabled={savingUberEnv || uberEnv === "sandbox"}
+                >
+                  🧪 Sandbox (Pruebas)
+                </button>
+                <button
+                  className={`uber-env-btn ${uberEnv === "production" ? "uber-env-btn--active uber-env-btn--production" : ""}`}
+                  onClick={() => {
+                    if (typeof window !== "undefined" && !window.confirm("¿Cambiar a PRODUCCIÓN? Uber enviará repartidores reales y se cobrarán entregas.")) return;
+                    toggleUberEnv("production");
+                  }}
+                  disabled={savingUberEnv || uberEnv === "production"}
+                >
+                  🚀 Producción
+                </button>
+              </div>
+              <p style={{ fontSize: "0.85rem", margin: 0 }}>
+                Estado actual:{" "}
+                <span style={{ fontWeight: 700, color: uberEnv === "sandbox" ? "#ffa726" : "#4caf50" }}>
+                  {uberEnv === "sandbox" ? "🧪 SANDBOX — sin entregas reales" : "🚀 PRODUCCIÓN — entregas reales"}
+                </span>
+              </p>
+            </div>
+          </div>
+        )}
       </main>
 
       <style jsx>{`
@@ -515,6 +588,13 @@ export default function AdminDashboard() {
         .order-items { margin: 0.25rem 0; padding-left: 1.1rem; color: rgba(255,255,255,0.75); font-size: 0.9rem; }
         .order-card .price { margin: 0.2rem 0; }
         .order-card a { color: #ffd700; }
+        .uber-env-toggle { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        .uber-env-btn { padding: 0.75rem 1.5rem; border-radius: 6px; border: 2px solid rgba(255,215,0,0.2); background: transparent; color: rgba(255,255,255,0.7); font-weight: 600; font-size: 1rem; cursor: pointer; transition: all 0.2s; }
+        .uber-env-btn:hover:not(:disabled) { border-color: #ffd700; color: #fff; }
+        .uber-env-btn:disabled { opacity: 0.5; cursor: default; }
+        .uber-env-btn--active { border-width: 2px; }
+        .uber-env-btn--sandbox.uber-env-btn--active { background: rgba(255,167,38,0.15); border-color: #ffa726; color: #ffa726; }
+        .uber-env-btn--production.uber-env-btn--active { background: rgba(76,175,80,0.15); border-color: #4caf50; color: #4caf50; }
       `}</style>
     </div>
   );
