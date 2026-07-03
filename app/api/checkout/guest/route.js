@@ -26,6 +26,7 @@ import { createCheckoutLimiter, checkAndRespond } from "@/lib/rateLimit";
 import { recomputeOrder, makeOrderNumber } from "@/lib/orderPricing";
 import { createOrder } from "@/lib/ordersStore";
 import { isSquareConfigured, createSquarePayment } from "@/lib/square";
+import { isUberDirectConfigured, createDelivery } from "@/lib/uberDirect";
 import { SITE } from "@/app/site.config";
 import {
   GuestCheckoutSchema,
@@ -128,6 +129,18 @@ export async function POST(request) {
       paid,
     });
 
+    let delivery = null;
+    if (fulfillment === "delivery" && isUberDirectConfigured && delivery_address) {
+      delivery = await createDelivery({
+        orderNumber,
+        customerName,
+        customerPhone: phone,
+        dropoffAddress: delivery_address,
+        items: computed.lines,
+        total: computed.total,
+      });
+    }
+
     await logAudit({
       entityType: "order",
       entityId: orderId,
@@ -135,7 +148,7 @@ export async function POST(request) {
       actorType: "anonymous",
       ipAddress: request.headers.get("x-forwarded-for") || "unknown",
       userAgent: request.headers.get("user-agent"),
-      newValues: { orderNumber, total: computed.total, email, paid },
+      newValues: { orderNumber, total: computed.total, email, paid, deliveryId: delivery?.deliveryId },
     });
 
     if (marketing_consent) {
@@ -165,6 +178,7 @@ export async function POST(request) {
         deliveryAddress: fulfillment === "delivery" ? delivery_address : null,
         paid,
         estimatedTime: "30-45 minutes",
+        trackingUrl: delivery?.trackingUrl || null,
       },
     });
 
@@ -177,6 +191,9 @@ export async function POST(request) {
         message: "Order created successfully",
         confirmationEmailSent: true,
         doubleOptInEmailSent: marketing_consent,
+        delivery: delivery?.ok
+          ? { trackingUrl: delivery.trackingUrl, estimatedDropoff: delivery.estimatedDropoff }
+          : null,
       },
       { status: 201 }
     );
