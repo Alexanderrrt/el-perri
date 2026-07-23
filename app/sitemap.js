@@ -1,13 +1,12 @@
-import { SITE } from "./site.config";
-
-const base = (SITE.website || "https://elperrilatinfood.com").replace(/\/$/, "");
+import { SITE, localizedPath } from "./content";
 
 export default function sitemap() {
-  const now = new Date();
-  return [
-    { url: `${base}/`, lastModified: now, changeFrequency: "weekly", priority: 1 },
-    { url: `${base}/menu`, lastModified: now, changeFrequency: "weekly", priority: 0.9 },
-    { url: `${base}/nuestra-historia`, lastModified: now, changeFrequency: "monthly", priority: 0.6 },
-    { url: `${base}/catering`, lastModified: now, changeFrequency: "monthly", priority: 0.7 },
-  ];
+  const pages = ["home", "menu", "wholesale", "about", "privacy", "terms"];
+  return pages.flatMap((page) => ["es", "en"].map((locale) => ({
+    url: `${SITE.website}${localizedPath(locale, page)}`,
+    lastModified: new Date(),
+    changeFrequency: page === "menu" ? "weekly" : "monthly",
+    priority: page === "home" ? 1 : page === "menu" ? 0.9 : 0.7,
+    alternates: { languages: { es: `${SITE.website}${localizedPath("es", page)}`, en: `${SITE.website}${localizedPath("en", page)}` } },
+  })));
 }

@@ -1,69 +1,54 @@
-# El Perri Latin Food — website
+# El Gran Tamal Colombiano
 
-Next.js (App Router) site for a Colombian restaurant in San José, CA, with an
-admin panel for menu management and a daily "almuerzo del día" email.
+Bilingual brochure website for the San Jose restaurant and the Fontana/Los
+Angeles wholesale tamal operation.
 
-**Stack:** Next.js 16 (App Router) · Supabase (Postgres + Realtime) · Resend
-(email) · Vercel (hosting + cron).
+## Stack
 
-## Run it
+- Next.js 16 App Router
+- React 18
+- Vercel Analytics and Speed Insights
+- Static local menu and media; no database or customer-data collection
+
+## Local development
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in your own values — see below
-npm run dev                  # http://localhost:3000
+npm run dev
 ```
 
-## Scripts
+No environment variables are required.
 
-| Command | What it does |
+## Verification
+
+```bash
+npm run verify
+```
+
+This runs ESLint, menu/content tests, and the production build.
+
+## Content structure
+
+- `app/content.js` — shared business details, hours, links, bilingual menu,
+  locale paths, and media-source references.
+- `app/components/PageViews.jsx` — shared bilingual page views.
+- `public/media/` — optimized restaurant-controlled WebP assets.
+- `docs/MEDIA-SOURCES.md` — source and rights record for every public asset.
+- `docs/OWNERSHIP-HANDOFF.md` — agency operations and DNS cutover checklist.
+
+## Routes
+
+| Spanish | English |
 |---|---|
-| `npm run dev` | Local dev server |
-| `npm run build` | Production build |
-| `npm run lint` | ESLint |
-| `npm test` | Jest |
-| `npm run verify` | lint + test + build — run before every commit |
-| `npm run db:migrate <file>` | Apply a `.sql` file to `PG_URL` |
+| `/` | `/en` |
+| `/menu` | `/en/menu` |
+| `/mayoreo` | `/en/wholesale` |
+| `/historia` | `/en/about` |
+| `/privacy` | `/en/privacy` |
+| `/terms` | `/en/terms` |
 
-## Pages
+## Publishing
 
-- `/` — Home: intro, featured dishes, gallery, Instagram reels
-- `/menu` — Full menu (live from Supabase)
-- `/catering` — Catering inquiry
-- `/nuestra-historia` — About / story
-- `/checkout` — Guest checkout
-- `/admin/login`, `/admin/dashboard` — Admin panel (menu + daily lunch email),
-  gated by a signed session cookie — see `proxy.ts`
-
-## Edit site content in ONE place
-
-Open **`app/site.config.js`**:
-- `SITE.ORDER_URL` — paste your ordering link (Toast/Square/etc.) when ready
-- `SITE.phone / address / hours / email` — business details
-- `IMAGES` / `GALLERY` / `VIDEO` — photos and video live in `/public`
-- `REELS` — Instagram post permalinks featured on the home page
-- `MENU_GROUPS` — fallback menu data (the live site reads from Supabase; see
-  `db/supabase-schema.sql`)
-
-## Environment variables
-
-See **`.env.example`** for the full list with descriptions (Supabase, Resend,
-admin credentials, cron secret). Never commit `.env.local`.
-
-## Project structure
-
-```
-app/            Routes, components, site.config.js
-lib/            Supabase clients, auth, email, validation, rate limiting
-db/             Supabase schema + RLS policies (source of truth for the DB)
-scripts/        One-off ops scripts (migrations, backups)
-docs/           Active runbooks — see docs/README.md
-docs/archive/   Historical planning/status docs, kept for reference only
-assets/         Raw media not served by the site (photos, reports)
-__tests__/      Jest tests
-```
-
-## More docs
-
-- [docs/README.md](docs/README.md) — what's in `docs/`
-- [CLAUDE.md](CLAUDE.md) — branching, commit, and safety rules for this repo
+The agency manages GitHub and Vercel. Production changes go through a feature
+branch and reviewed pull request. DNS is moved only after staging approval and
+the checks in `docs/OWNERSHIP-HANDOFF.md` are complete.

@@ -1,30 +1,27 @@
-import { MENU_GROUPS, SITE } from "../app/site.config.js";
+const { MENU, SITE, localizedPath } = require("../app/content");
 
-describe("menu data integrity", () => {
-  test("has at least one group with items", () => {
-    expect(Array.isArray(MENU_GROUPS)).toBe(true);
-    expect(MENU_GROUPS.length).toBeGreaterThan(0);
-    expect(MENU_GROUPS.every((g) => Array.isArray(g.items))).toBe(true);
+describe("El Gran Tamal Colombiano content", () => {
+  test("has the published 31/15/20 menu structure", () => {
+    expect(MENU.map((section) => section.items.length)).toEqual([31, 15, 20]);
   });
 
-  test("every menu item has id, name and price", () => {
-    for (const group of MENU_GROUPS) {
-      for (const item of group.items) {
-        expect(item.id).toBeTruthy();
-        expect(item.name).toBeTruthy();
-        expect(item.price).toBeTruthy();
-      }
+  test("every menu item has a unique id, price, and both languages", () => {
+    const items = MENU.flatMap((section) => section.items);
+    expect(new Set(items.map((entry) => entry.id)).size).toBe(items.length);
+    for (const entry of items) {
+      expect(entry.id).toBeTruthy();
+      expect(entry.name).toBeTruthy();
+      expect(entry.price).toMatch(/^\$\d+(?:\.\d{2})?$/);
+      expect(entry.description.es).toBeTruthy();
+      expect(entry.description.en).toBeTruthy();
     }
   });
 
-  test("menu item ids are unique", () => {
-    const ids = MENU_GROUPS.flatMap((g) => g.items.map((i) => i.id));
-    expect(new Set(ids).size).toBe(ids.length);
-  });
-});
-
-describe("site config", () => {
-  test("canonical website is an https URL", () => {
-    expect(SITE.website).toMatch(/^https:\/\//);
+  test("business links and locale routes are production-safe", () => {
+    expect(SITE.website).toBe("https://elgrantamalcolombianoca.com");
+    expect(SITE.phoneHref).toBe("tel:+15599436954");
+    expect(SITE.whatsapp).toBe("https://wa.me/15599436954");
+    expect(localizedPath("es", "wholesale")).toBe("/mayoreo");
+    expect(localizedPath("en", "wholesale")).toBe("/en/wholesale");
   });
 });

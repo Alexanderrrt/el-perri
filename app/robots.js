@@ -1,10 +1,5 @@
-import { SITE } from "./site.config";
-
-const base = (SITE.website || "https://elperrilatinfood.com").replace(/\/$/, "");
+import { SITE } from "./content";
 
 export default function robots() {
-  return {
-    rules: { userAgent: "*", allow: "/" },
-    sitemap: `${base}/sitemap.xml`,
-  };
+  return { rules: { userAgent: "*", allow: "/" }, sitemap: `${SITE.website}/sitemap.xml`, host: SITE.website };
 }
