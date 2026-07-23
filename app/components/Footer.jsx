@@ -1,77 +1,43 @@
-import { SITE } from "../site.config";
+"use client";
 
-const IconPhone = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8.1 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.5c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2.2Z" />
-  </svg>
-);
-const IconGlobe = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18" />
-  </svg>
-);
-const IconInstagram = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <rect x="3" y="3" width="18" height="18" rx="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" />
-  </svg>
-);
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { SITE, localizedPath } from "../content";
 
+/** Footer — Location, verified operating hours, contact, and legal links. */
 export function Footer() {
-  const year = new Date().getFullYear();
-  const stripEmoji = (s) => s.replace(/^[^\w(]+\s*/, "");
+  const pathname = usePathname();
+  const locale = pathname.startsWith("/en") ? "en" : "es";
+  const es = locale === "es";
   return (
-    <footer className="footer">
+    <footer className="site-footer">
       <div className="footer-grid">
         <div>
-          <p className="footer-brand">
-            {SITE.logo && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={SITE.logo} alt="" aria-hidden="true" />
-            )}
-            {SITE.name}
-          </p>
-          {SITE.address.map((line, i) => (
-            <p key={i}>{stripEmoji(line)}</p>
-          ))}
-          <p className="footer-contact" style={{ marginTop: 12 }}>
-            <IconPhone />
-            <a href={SITE.phoneHref} className="footer-link">{SITE.phone}</a>
-          </p>
-          {SITE.website && (
-            <p className="footer-contact">
-              <IconGlobe />
-              <a href={SITE.website} className="footer-link" target="_blank" rel="noopener noreferrer">
-                {SITE.email || "elperrilatinfood.com"}
-              </a>
-            </p>
-          )}
-          {SITE.social?.instagram && (
-            <p className="footer-contact">
-              <IconInstagram />
-              <a href={SITE.social.instagram} className="footer-link" target="_blank" rel="noopener noreferrer">
-                @elperri.food
-              </a>
-            </p>
-          )}
+          <Image src="/media/logo.webp" width={84} height={84} alt="El Gran Tamal Colombiano" />
+          <p>{es ? "Sabor colombiano, de nuestra tierra para tu mesa." : "Colombian flavor, from our homeland to your table."}</p>
         </div>
         <div>
-          <p className="footer-h">Horario</p>
-          {SITE.hours.map(([day, time]) => (
-            <p key={day}>
-              <span className="footer-day">{day}</span> {time}
-            </p>
-          ))}
+          <h2>{es ? "Visítanos" : "Visit us"}</h2>
+          <p>{SITE.address}</p>
+          <p><a href={SITE.maps} target="_blank" rel="noreferrer">{es ? "Cómo llegar" : "Get directions"}</a></p>
         </div>
         <div>
-          <p className="footer-h">Explorar</p>
-          <p><a href="/menu" className="footer-link">Menú</a></p>
-          <p><a href="/nuestra-historia" className="footer-link">Nuestra historia</a></p>
-          <p><a href="/catering" className="footer-link">Catering</a></p>
+          <h2>{es ? "Horario" : "Hours"}</h2>
+          <p>{es ? "Mar–Vie 9 a.m.–9 p.m." : "Tue–Fri 9 a.m.–9 p.m."}<br />
+            {es ? "Sáb 8 a.m.–9 p.m. · Dom 8 a.m.–4 p.m." : "Sat 8 a.m.–9 p.m. · Sun 8 a.m.–4 p.m."}<br />
+            {es ? "Lunes cerrado" : "Closed Monday"}</p>
+        </div>
+        <div>
+          <h2>{es ? "Hablemos" : "Contact"}</h2>
+          <p><a href={SITE.phoneHref}>{SITE.phone}</a></p>
+          <p><a href={SITE.whatsapp} target="_blank" rel="noreferrer">WhatsApp</a> · <a href={SITE.instagram} target="_blank" rel="noreferrer">Instagram</a></p>
         </div>
       </div>
-      <p className="footer-fine">
-        © {year} {SITE.name} · {SITE.city} · La felicidad hecha comida.
-      </p>
+      <div className="footer-bottom">
+        <span>© {new Date().getFullYear()} {SITE.name}</span>
+        <span><Link href={localizedPath(locale, "privacy")}>{es ? "Privacidad" : "Privacy"}</Link> · <Link href={localizedPath(locale, "terms")}>{es ? "Términos" : "Terms"}</Link></span>
+      </div>
     </footer>
   );
 }

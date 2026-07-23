@@ -1,14 +1,5 @@
 {
   "regions": ["sfo1"],
-  "crons": [
-    {
-      "path": "/api/cron/daily-lunch",
-      "schedule": "0 16 * * *"
-    }
-  ],
-  "functions": {
-    "app/api/cron/daily-lunch/route.js": {
-      "maxDuration": 60
-    }
-  }
+  "cleanUrls": true,
+  "trailingSlash": false
 }
